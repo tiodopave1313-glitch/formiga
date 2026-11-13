@@ -1,0 +1,16 @@
+{
+  "stage": "lint",
+  "note": "Only failure is the word band: 300 words for a 810-1320 band.",
+  "input": {
+    "profile": "medium",
+    "word_count": 300,
+    "sections": 3,
+    "sources": 9
+  },
+  "expected": {
+    "ok": false,
+    "violations": [
+      "band"
+    ]
+  }
+}

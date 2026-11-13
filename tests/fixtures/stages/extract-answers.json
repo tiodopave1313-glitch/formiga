@@ -1,0 +1,23 @@
+{
+  "stage": "extract",
+  "note": "Reader returns contiguous closed ranges only; the code builds the quote from those ids.",
+  "input": {
+    "facet": "mechanism",
+    "segments": [
+      "[0] Calcareous soils raise pH above 7.5.",
+      "[1] At that pH, iron becomes insoluble.",
+      "[2] Lavender then shows interveinal chlorosis.",
+      "[3] The plant is native to the western Mediterranean."
+    ]
+  },
+  "expected": {
+    "verdict": "answers",
+    "segments": [
+      [
+        0,
+        2
+      ]
+    ],
+    "stance": "supports"
+  }
+}

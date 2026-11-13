@@ -1,0 +1,22 @@
+{
+  "stage": "plan",
+  "note": "Maps a question to a closed aspect list. The model returns facets; the code builds sub-queries.",
+  "input": {
+    "question": "How does soil pH affect lavender growth?"
+  },
+  "expected": {
+    "entities": [
+      "soil pH",
+      "lavender"
+    ],
+    "aspects": [
+      "definition",
+      "mechanism",
+      "quantities"
+    ],
+    "units_expected": [
+      "pH"
+    ],
+    "language": "en"
+  }
+}

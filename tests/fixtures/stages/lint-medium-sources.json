@@ -1,0 +1,16 @@
+{
+  "stage": "lint",
+  "note": "Below the medium source floor of 8.",
+  "input": {
+    "profile": "medium",
+    "word_count": 1000,
+    "sections": 3,
+    "sources": 4
+  },
+  "expected": {
+    "ok": false,
+    "violations": [
+      "sources"
+    ]
+  }
+}

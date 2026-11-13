@@ -1,0 +1,27 @@
+{
+  "stage": "synthesize",
+  "rung": "bounded-edit",
+  "note": "Deletions are word indices (<=20%); insertions are connector ids from the closed list.",
+  "input": {
+    "facet": "mechanism",
+    "base": "At that pH iron becomes insoluble and lavender then shows interveinal chlorosis",
+    "connectors": {
+      "c1": "as a result",
+      "c2": "because",
+      "c3": "however"
+    }
+  },
+  "expected": {
+    "ids": [
+      11
+    ],
+    "del": [
+      1,
+      7
+    ],
+    "ins": [
+      "c1",
+      "c2"
+    ]
+  }
+}

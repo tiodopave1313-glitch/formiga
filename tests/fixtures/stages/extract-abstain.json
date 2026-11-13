@@ -1,0 +1,17 @@
+{
+  "stage": "extract",
+  "note": "Nothing answers the facet. The reader must abstain rather than pick a near neighbour.",
+  "input": {
+    "facet": "costs",
+    "segments": [
+      "[0] Lavender prefers full sun.",
+      "[1] It tolerates poor soils if drainage is good.",
+      "[2] Prune in early spring to keep the bush compact."
+    ]
+  },
+  "expected": {
+    "verdict": "no",
+    "segments": [],
+    "stance": "neutral"
+  }
+}
