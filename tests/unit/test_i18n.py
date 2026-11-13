@@ -131,3 +131,20 @@ def test_date_formatting_follows_the_locale_order() -> None:
 
 def test_unknown_locale_falls_back_to_english_conventions() -> None:
     assert format_number(1000, locale="zz") == "1,000"
+
+
+def test_every_english_key_has_a_portuguese_translation() -> None:
+    """A missing key silently reads as English, so the gap has to be a test failure."""
+    english = json.loads((LOCALES_DIR / "en.json").read_text(encoding="utf-8"))
+    portuguese = json.loads((LOCALES_DIR / "pt-BR.json").read_text(encoding="utf-8"))
+    missing = sorted(set(english) - set(portuguese))
+    assert not missing, f"keys missing from pt-BR.json: {missing}"
+
+
+def test_no_locale_defines_a_key_english_lacks() -> None:
+    """The fallback is English, so an extra key would be unreachable or a typo."""
+    english = json.loads((LOCALES_DIR / "en.json").read_text(encoding="utf-8"))
+    for path in LOCALES_DIR.glob("*.json"):
+        data = json.loads(path.read_text(encoding="utf-8"))
+        extra = sorted(set(data) - set(english))
+        assert not extra, f"{path.name} has keys English lacks: {extra}"

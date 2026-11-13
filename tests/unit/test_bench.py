@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from formiga.core.bench import (
     CALL_OVERHEAD_S,
     FETCH_SECONDS,
@@ -158,3 +160,55 @@ def test_measure_endpoint_uses_two_short_requests() -> None:
 
 def test_peak_rss_is_read_from_proc() -> None:
     assert peak_rss_mb() > 0
+
+
+def test_an_unreachable_endpoint_is_reported_not_raised() -> None:
+    """A bench run with one tier down still measures the other (see ``run_bench``)."""
+    from formiga.config import Endpoint
+    from formiga.core.bench import BenchUnavailable
+
+    with pytest.raises(BenchUnavailable) as caught:
+        measure_endpoint(Endpoint(endpoint="http://127.0.0.1:9", request_timeout_s=1.0))
+    assert caught.value.endpoint.endswith(":9")
+    assert "not answering" in str(caught.value)
+
+
+def test_failures_are_part_of_the_bench_result() -> None:
+    payload = BenchResult(tiers={"fast": _speed()}, failures={"strong": "down"}).as_dict()
+    assert payload["failures"] == {"strong": "down"}
+
+
+def test_failures_are_recorded_in_the_document(tmp_path: Path) -> None:
+    path = tmp_path / "benchmarks.md"
+    write_benchmarks(path, BenchResult(tiers={"fast": _speed()}, failures={"strong": "down"}))
+    text = path.read_text()
+    assert "Unmeasured tiers" in text
+    assert "`strong`: down" in text
+
+
+def test_the_prefill_probe_is_never_repeated() -> None:
+    """A repeated prompt measures the server's prefix cache, not prefill (PRD §8.3)."""
+    from formiga.core.bench import prefill_probe
+
+    first, second = prefill_probe(), prefill_probe()
+    assert first != second
+    assert first.endswith(prefill_probe().split("] ", 1)[1])
+    assert first.startswith("[bench ")
+
+
+def test_measure_endpoint_sends_the_nonce_with_the_prompt() -> None:
+    from formiga.config import Endpoint
+    from formiga.core.bench import PREFILL_PROMPT
+    from formiga.llm.fake import FakeLLM
+    from formiga.llm.types import Completion
+
+    backend = FakeLLM(
+        [
+            Completion(content="ok", input_tokens=500, output_tokens=1, finish_reason="stop"),
+            Completion(content="a\nb", input_tokens=10, output_tokens=2, finish_reason="stop"),
+        ]
+    )
+    measure_endpoint(Endpoint(), client=backend)
+    sent = backend.requests[0].messages[0].content
+    assert PREFILL_PROMPT in sent
+    assert sent.startswith("[bench ")

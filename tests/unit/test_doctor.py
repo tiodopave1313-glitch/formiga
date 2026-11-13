@@ -123,3 +123,30 @@ def test_diagnostics_are_recorded_for_the_frontmatter(ready: Path) -> None:
     assert payload["layout_known"] is True
     assert "prompt_version" in payload
     assert "segmenter_version" in payload
+
+
+def test_a_dead_strong_tier_degrades_instead_of_failing(ready: Path) -> None:
+    """PRD §8.2: in ``dual`` a down strong endpoint falls back; it is not fatal."""
+    settings = load_settings(
+        home=ready,
+        environ={
+            "FORMIGA_LAYOUT": "dual",
+            "FORMIGA_ENDPOINT": "http://127.0.0.1:8080",
+            "FORMIGA_STRONG_ENDPOINT": "http://127.0.0.1:9",
+        },
+    )
+    report = run_doctor(settings, probe_endpoints=True)
+    strong = next(check for check in report.checks if check.name.endswith("strong"))
+    assert strong.skipped
+    assert "fall back to the fast tier" in strong.detail
+
+
+def test_a_dead_single_layout_endpoint_is_a_failure(ready: Path) -> None:
+    """``single`` has no fallback, so the only endpoint being down must fail."""
+    settings = load_settings(
+        home=ready,
+        environ={"FORMIGA_LAYOUT": "single", "FORMIGA_ENDPOINT": "http://127.0.0.1:9"},
+    )
+    report = run_doctor(settings, probe_endpoints=True)
+    assert not report.ok
+    assert any("unreachable" in check.detail for check in report.failures)

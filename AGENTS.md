@@ -21,6 +21,15 @@ edit one.
 - Phase gate (PRD §13 rule 20): tests, `formiga doctor --probe`, `formiga bench`,
   `formiga lint` on eval runs, update `docs/`
 
+`formiga serve` launches one `llama-server` per configured tier from `layout.*.model_path`
+(a `--dry-run` flag prints the command). It never downloads weights and never guesses a
+path: a tier without `model_path` is reported, not started. `FORMIGA_LLAMA_SERVER` points
+at a binary outside `PATH`.
+
+`formiga lint [target]` reads a persisted `report.json` (file, run directory, run-id
+substring, or the newest report) and applies `research.contract.lint`. It is free: no
+model, no network, and it never mutates the report.
+
 Do not invent alternate tooling (no Poetry, no pip-tools, no `unittest`, no black). Tests
 never touch the network and never call a real model: `formiga.llm.fake.FakeLLM` is the backend
 for every test, and `tests/unit/test_docs.py` fails if the F0 paperwork disappears.
@@ -28,7 +37,7 @@ for every test, and `tests/unit/test_docs.py` fails if the F0 paperwork disappea
 ## Architecture (PRD §9)
 
 `src/formiga/` layers: `cli.py` / `config.py` / `runtime.py` → `core/` (router, chat, modes,
-intents, budget, citations, compaction, prompts, doctor, init, bench) → `llm/` (client,
+intents, budget, citations, compaction, prompts, doctor, init, bench, serve, lint) → `llm/` (client,
 schema, grammar, coerce, cache, governed, router, fake) → `research/` (contract, report) →
 `storage/` (db, migrations, idempotency, lock) → `ui/` (Ui, repl). Packaged data lives in
 `src/formiga/data/` (`prompts/en`, `templates`, `skills`, `i18n/locales`) and must load via
@@ -64,7 +73,18 @@ are `report.json` → deterministic renderer; the LLM never emits Markdown.
 - Prompt/schema/cache keys include `schema_version`, `grammar_hash`, `rung`,
   `segmenter_version`; do not drop them.
 - A pre-v5 `~/.formiga` is **moved aside** (`*.legacy`), never deleted and never half-read.
-  That includes a foreign `formiga.db` and its `-wal`/`-shm` siblings.
+  That includes a foreign `formiga.db` and its `-wal`/`-shm` siblings. Ownership is decided
+  by manifest *shape* (`meta(key, value)`), never by table names.
+- `--lang` is a CLI choice and outranks the config file (PRD §9 precedence); the flag is
+  threaded through as `language_is_flag` so an unset flag never overrides `language`.
+- In `dual`, a dead `strong` tier is a **degradation** (calls fall back to `fast`), not a
+  doctor failure. A dead `single` endpoint is a failure, because there is no fallback.
+- `bench` reports an unreachable tier instead of raising, and exits **2** (partial) when
+  only some tiers were measured. Its prefill probe carries a random nonce
+  (`prefill_probe()`); without it the run measures `llama-server`'s prefix cache, which
+  once made the same endpoint look 8x faster. Never make it deterministic.
+- `docs/benchmarks.md`'s measured estimate table is checked against the formula by
+  `tests/unit/test_docs.py`; a hand-edit that disagrees with `estimate_table` fails.
 
 Useful references: `docs/adr/` (16 ADRs listed in PRD §15, indexed in `docs/adr/README.md`),
 `docs/benchmarks.md` for measured deadlines and the shipped constants, `docs/uninstall.md` for

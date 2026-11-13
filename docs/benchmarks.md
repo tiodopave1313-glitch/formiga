@@ -44,6 +44,48 @@ A profile is *supportable* on a layout when the estimate fits the deadline with 
 it does not, the profile is reduced (sections first, then sources) and `run.incomplete.budget`
 is recorded with the exact cap - **the guarantee is never quietly shrunk**.
 
+## Measured on the reference machine
+
+Two consecutive runs of `formiga bench` on 2026-11-13, `dual` layout, 4-core CPU,
+15.5 GB RAM, `llama-server` on :8080 and nothing listening on :8081:
+
+| tier | gen t/s | prefill t/s | status |
+|---|---|---|---|
+| `fast` (`small`) | 15.2 / 15.5 | 65.4 / 63.0 | measured, reproducible |
+| `strong` (`large`) | — | — | not running at the time |
+| peak agent RSS | — | — | **40.5 MB** (budget: < 1 GB) |
+
+Estimates from the first run (15.2 gen / 65.4 prefill t/s) against the §8.4 deadlines:
+
+| profile | estimate | `dual` deadline | headroom |
+|---|---|---|---|
+| `short` | 3.5 min | 6 min | ✓ |
+| `medium` | 15.4 min | 30 min | ✓ |
+| `long` | 23.4 min | 45 min | ✓ |
+| `thesis` | 34.7 min | 90 min | ✓ |
+
+### Three things this bench taught us
+
+**Prefill is fast, generation is not.** 63-65 t/s of prefill against 15 t/s of generation
+on a 4-core CPU means the per-profile cost is driven by **output tokens and per-call
+overhead**, not by prompt length. That is the premise the extraction-heavy design rests
+on, and it held: at 15 t/s of generation every `dual` profile fits its deadline with
+room to spare.
+
+**A benchmark can silently measure the prompt cache.** The first run reported **225
+prefill t/s** and an immediate re-run reported **1,888 t/s** for the same endpoint: both
+were prefix-cache hits, because `llama-server` keeps a prefix cache by design (PRD §8.3).
+`bench` now prefixes the probe with a random nonce (`prefill_probe()`), and
+`tests/unit/test_bench.py` fails if that nonce ever becomes deterministic again. **Any
+number recorded before that fix is an upper bound, not a measurement.**
+
+**A tier being down does not abort the bench.** `formiga bench` records the failure,
+measures what it can, appends the section and exits **2** (partial) - the same contract as
+a budget-exhausted run. Nothing is ever written for a tier that was not measured.
+
+Re-run `formiga bench` after changing models or thread counts: every number above is a
+measurement of one machine on one day, not a specification.
+
 ## Model aliases
 
 Ids are placeholders maintained by this file and by `profiles/`, never by the core (PRD §8.1).
@@ -70,6 +112,6 @@ the date, the layout, the speeds per tier and the resulting estimate per profile
 
 `tests/unit/test_bench.py` pins the formula against the PRD's worked examples without touching
 a model: monotonicity across profiles, `single` costing more than `dual`, a slower generation
-rate raising the estimate, zero speeds not dividing by zero, and fetch time dominating the
-`short` profile. If someone changes a constant to make a deadline fit, that test is the place
-where the change becomes visible in review.
+rate raising the estimate, zero speeds not dividing by zero, fetch time dominating the
+`short` profile, and the prefill probe carrying a fresh nonce. If someone changes a constant
+to make a deadline fit, that test is the place where the change becomes visible in review.

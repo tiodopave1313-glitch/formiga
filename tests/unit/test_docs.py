@@ -122,3 +122,49 @@ def test_rubric_defines_every_axis_and_the_source_zero_rule() -> None:
         assert axis in text
     collapsed = " ".join(text.split())
     assert "no zero on *Source use*" in collapsed
+
+
+def test_the_documented_bench_constants_match_the_measured_section() -> None:
+    """A measurement section that contradicts the shipped constants is worse than none."""
+    from formiga.core.bench import OVERHEAD_FACTOR
+
+    text = (DOCS / "benchmarks.md").read_text(encoding="utf-8")
+    if "## Measured on the reference machine" not in text:
+        return
+    measured = text.split("## Measured on the reference machine", 1)[1]
+    measured = measured.split("## Model aliases", 1)[0]
+    assert "peak agent RSS" in measured
+    assert "not running at the time" in measured, "an unmeasured tier must say so"
+    for factor in OVERHEAD_FACTOR.values():
+        assert f"{factor:.2f}" in text
+
+
+def test_the_measured_estimate_table_matches_the_formula() -> None:
+    """A hand-copied estimate table drifts the moment a constant changes."""
+    import re
+
+    from formiga.core.bench import BenchResult, Speed, estimate_table
+
+    text = (DOCS / "benchmarks.md").read_text(encoding="utf-8")
+    if "## Measured on the reference machine" not in text:
+        return
+    section = text.split("## Measured on the reference machine", 1)[1]
+    section = section.split("## Model aliases", 1)[0]
+
+    row = re.search(
+        r"\| `fast` \([^)]+\) \| ([\d.]+) / ([\d.]+) \| ([\d.]+) / ([\d.]+) \|",
+        section,
+    )
+    assert row, "the measured table must record both runs"
+    # The doc states which run the estimate comes from: the first one.
+    gen, prefill = float(row.group(1)), float(row.group(3))
+    rows = dict(re.findall(r"^\| `(\w+)` \| ([\d.]+) min \|", section, re.MULTILINE))
+    expected = estimate_table(
+        BenchResult(tiers={"fast": Speed(generate_tps=gen, prefill_tps=prefill)},
+                    layout="dual"),
+        layout="dual",
+    )
+    for profile, value in expected.items():
+        assert f"{value / 60:.1f}" == rows[profile], (
+            f"{profile}: docs say {rows[profile]} min, formula says {value / 60:.1f}"
+        )

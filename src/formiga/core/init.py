@@ -53,6 +53,9 @@ name = "dual"
 [layout.fast]
 endpoint = "http://127.0.0.1:8080"
 model = "small"
+# Path to the GGUF `formiga serve` should launch. Empty means "run the server yourself".
+model_path = ""
+threads = 0
 context = 4096
 tool_call_format = "text"
 supports_grammar = true
@@ -61,6 +64,8 @@ rung_ceiling = "bounded-edit"
 [layout.strong]
 endpoint = "http://127.0.0.1:8081"
 model = "large"
+model_path = ""
+threads = 0
 context = 4096
 tool_call_format = "none"
 supports_grammar = true
@@ -74,6 +79,9 @@ name = "{layout}"
 [layout.fast]
 endpoint = "{endpoint}"
 model = "{model}"
+# Path to the GGUF `formiga serve` should launch. Empty means "run the server yourself".
+model_path = ""
+threads = 0
 context = 4096
 tool_call_format = "text"
 supports_grammar = true

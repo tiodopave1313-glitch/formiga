@@ -115,6 +115,7 @@ def _check_endpoint(settings: Settings) -> list[Check]:
     from formiga.llm.client import HTTPLLM
 
     checks: list[Check] = []
+    single = settings.layout.is_single()
     for tier, endpoint in settings.layout.tiers.items():
         name = t("doctor.endpoint", locale="en", tier=tier)
         backend = HTTPLLM(endpoint, profile_name=tier)
@@ -125,9 +126,20 @@ def _check_endpoint(settings: Settings) -> list[Check]:
         if healthy:
             checks.append(Check(name, True, t("doctor.endpoint_ok", locale="en",
                                              tier=tier, endpoint=endpoint.endpoint)))
-        else:
-            checks.append(Check(name, False, t("doctor.endpoint_down", locale="en",
-                                               tier=tier, endpoint=endpoint.endpoint)))
+            continue
+        if tier == "strong" and not single:
+            # PRD §8.2: in ``dual`` a dead strong tier degrades to the fast one, it does
+            # not fail the run. Reporting it as fatal would make the recommended layout
+            # un-startable whenever the second server is simply not up yet.
+            checks.append(Check(
+                name, True,
+                t("doctor.endpoint_degraded", locale="en", tier=tier,
+                  endpoint=endpoint.endpoint),
+                skipped=True,
+            ))
+            continue
+        checks.append(Check(name, False, t("doctor.endpoint_down", locale="en",
+                                           tier=tier, endpoint=endpoint.endpoint)))
     return checks
 
 

@@ -122,7 +122,11 @@ class Endpoint:
 
     endpoint: str = "http://127.0.0.1:8080"
     model: str | None = None
+    #: Path to the GGUF ``formiga serve`` launches. Empty means "start it yourself".
+    model_path: str | None = None
     context: int = 4096
+    #: Physical cores for prefill; ``0`` lets ``serve`` derive it (PRD §8.3).
+    threads: int = 0
     tool_call_format: ToolCallFormat = "text"
     supports_grammar: bool = True
     temperature: dict[str, float] = field(
@@ -316,6 +320,8 @@ def _env_overrides(environ: dict[str, str]) -> dict[str, Any]:
         "LAYOUT": ("layout", "name"),
         "ENDPOINT": ("layout", "fast", "endpoint"),
         "MODEL": ("layout", "fast", "model"),
+        "STRONG_ENDPOINT": ("layout", "strong", "endpoint"),
+        "STRONG_MODEL": ("layout", "strong", "model"),
         "RUNG_CEILING": ("layout", "fast", "rung_ceiling"),
     }
     overrides: dict[str, Any] = {}
@@ -337,6 +343,12 @@ def _validate(settings: Settings, *, source: Path | None) -> Settings:
         raise ConfigError(f"unknown UI language: {settings.language}", source=source)
     if settings.layout.name not in LAYOUT_NAMES:
         raise ConfigError(f"unknown layout: {settings.layout.name}", source=source)
+    if settings.layout.name == "dual" and settings.layout.strong is None:
+        # Without a strong tier ``dual`` is silently ``single``, which would make
+        # ``doctor``'s ceiling and the deadline formula describe a machine that is not
+        # there. Refusing is the only honest option. (``single-strong`` legitimately has
+        # one endpoint: the strong model serving every role.)
+        raise ConfigError("layout dual requires a [layout.strong] table", source=source)
     if settings.report.profile not in PROFILE_NAMES:
         raise ConfigError(f"unknown profile: {settings.report.profile}", source=source)
     if settings.report.citation_style not in CITATION_STYLES:

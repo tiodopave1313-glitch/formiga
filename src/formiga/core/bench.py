@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import time
+import uuid
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -21,10 +22,30 @@ from formiga.research.contract import DEFAULT_PROFILES
 PREFILL_PROMPT = "Explain in one sentence what a soil pH buffer does. " * 24
 GENERATE_PROMPT = "List three uses of lime in agriculture, one per line."
 
+
+def prefill_probe() -> str:
+    """The prefill prompt with a nonce, so the server cannot answer from its prompt cache.
+
+    ``llama-server`` keeps a prefix cache by design (PRD §8.3). A bench that reuses the
+    same prompt twice therefore measures a cache hit - the first run on this machine
+    reported 225 t/s and an immediate re-run reported 1,888 t/s for the *same* endpoint.
+    Both numbers were real; only one of them was prefill.
+    """
+    return f"[bench {uuid.uuid4().hex}] {PREFILL_PROMPT}"
+
 CALL_OVERHEAD_S = 0.25
 #: Overhead factors from PRD §8.4; measured, never tuned down to fit a deadline.
 OVERHEAD_FACTOR = {"dual": 1.15, "single": 1.9, "single-strong": 1.3, "proxy": 1.15}
 FETCH_SECONDS = {"short": 80, "medium": 220, "long": 300, "thesis": 300}
+
+
+class BenchUnavailable(RuntimeError):
+    """Raised when an endpoint cannot be measured because it is not answering."""
+
+    def __init__(self, endpoint: str, reason: str) -> None:
+        self.endpoint = endpoint
+        self.reason = reason
+        super().__init__(f"endpoint {endpoint} is not answering: {reason}")
 
 
 @dataclass
@@ -50,6 +71,9 @@ class BenchResult:
     tiers: dict[str, Speed] = field(default_factory=dict)
     peak_rss_mb: float = 0.0
     layout: str = "single"
+    #: Tiers that could not be measured, mapped to the reason. A bench run is still
+    #: useful with one tier down, so these are reported, never raised.
+    failures: dict[str, str] = field(default_factory=dict)
     measured_on: str = field(default_factory=lambda: date.today().isoformat())
 
     def as_dict(self) -> dict[str, object]:
@@ -58,6 +82,7 @@ class BenchResult:
             "measured_on": self.measured_on,
             "peak_rss_mb": round(self.peak_rss_mb, 1),
             "tiers": {tier: speed.as_dict() for tier, speed in self.tiers.items()},
+            "failures": dict(self.failures),
         }
 
 
@@ -103,20 +128,22 @@ def _slowest(tiers: dict[str, Speed]) -> Speed | None:
 
 def measure_endpoint(endpoint: Endpoint, *, client: object | None = None) -> Speed:
     """Measure prefill and generation speed with two short requests."""
+    from formiga.llm.base import BackendUnavailable
     from formiga.llm.client import HTTPLLM
     from formiga.llm.types import CompletionRequest, Message
 
     backend = client if client is not None else HTTPLLM(endpoint, profile_name="bench")
     try:
+        probe = prefill_probe()
         prefill_request = CompletionRequest(
-            messages=(Message(role="user", content=PREFILL_PROMPT),),
+            messages=(Message(role="user", content=probe),),
             temperature=0.0,
             max_tokens=1,
         )
         started = time.monotonic()
         prefill = backend.complete(prefill_request)  # type: ignore[attr-defined]
         prefill_elapsed = max(time.monotonic() - started, 1e-6)
-        prompt_tokens = prefill.input_tokens or len(PREFILL_PROMPT.split())
+        prompt_tokens = prefill.input_tokens or len(probe.split())
 
         generate_request = CompletionRequest(
             messages=(Message(role="user", content=GENERATE_PROMPT),),
@@ -134,6 +161,8 @@ def measure_endpoint(endpoint: Endpoint, *, client: object | None = None) -> Spe
             output_tokens=output_tokens,
             input_tokens=prompt_tokens,
         )
+    except BackendUnavailable as exc:
+        raise BenchUnavailable(endpoint.endpoint, str(exc)) from exc
     finally:
         if client is None:
             backend.close()  # type: ignore[attr-defined]
@@ -165,6 +194,9 @@ def write_benchmarks(path: Path, result: BenchResult, *, locale: str = "en") -> 
         f"| {tier} | {speed.generate_tps:.1f} | {speed.prefill_tps:.1f} |"
         for tier, speed in result.tiers.items()
     )
+    if result.failures:
+        lines.extend(["", "Unmeasured tiers:", ""])
+        lines.extend(f"- `{tier}`: {reason}" for tier, reason in result.failures.items())
     estimates = estimate_table(result)
     if estimates:
         lines.extend(["", "| profile | estimated minutes |", "|---|---|"])
@@ -186,11 +218,13 @@ __all__ = [
     "FETCH_SECONDS",
     "OVERHEAD_FACTOR",
     "BenchResult",
+    "BenchUnavailable",
     "Speed",
     "estimate_seconds",
     "estimate_table",
     "measure_endpoint",
     "peak_rss_mb",
+    "prefill_probe",
     "rss_env",
     "write_benchmarks",
 ]

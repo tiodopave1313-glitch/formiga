@@ -157,7 +157,38 @@ def test_deferred_commands_fail_loudly(isolated_home: Path) -> None:
     assert "not available yet" in result.stdout
 
 
-def test_serve_reports_the_phase_gap(isolated_home: Path) -> None:
-    from formiga.cli import run_serve
+def test_lint_is_not_deferred_any_more(isolated_home: Path) -> None:
+    """F0 ships the contract check, so ``lint`` must run the real command."""
+    result = CliRunner().invoke(build_app(), ["lint"])
+    # No report exists yet, so it fails - but with a lint error, not "not implemented".
+    assert "not available yet" not in result.stdout
+    assert result.exit_code == EXIT_ERROR
 
-    assert run_serve(lang="en") == EXIT_ERROR
+
+def test_serve_is_not_deferred_any_more(isolated_home: Path) -> None:
+    result = CliRunner().invoke(build_app(), ["serve", "--dry-run"])
+    assert "not available yet" not in result.stdout
+    assert "llama-server" in result.stdout or "model_path" in result.stdout
+
+
+
+def test_lang_flag_outranks_the_config_file(isolated_home: Path) -> None:
+    """A config in English must not defeat ``--lang pt-BR`` (PRD §9 precedence)."""
+    from formiga.cli import _settings
+
+    init_home(home=isolated_home, layout="single", ram_gb=8.0)
+    assert _settings("en").language == "en"
+    assert _settings("pt-BR", language_is_flag=True).language == "pt-BR"
+
+
+def test_lang_flag_is_ignored_when_it_was_not_passed(isolated_home: Path) -> None:
+    """Without the flag, the config's ``language`` is the source, not the default."""
+    from formiga.cli import _settings
+
+    init_home(home=isolated_home, layout="single", language="pt-BR", ram_gb=8.0)
+    assert _settings("en").language == "pt-BR"
+
+
+def test_init_accepts_a_language_flag(isolated_home: Path) -> None:
+    assert run_init(lang="pt-BR", language_is_flag=True) == EXIT_OK
+    assert 'language = "pt-BR"' in (isolated_home / "config.toml").read_text()
