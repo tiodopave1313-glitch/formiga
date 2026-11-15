@@ -1,7 +1,0 @@
-{"ts": "2026-11-15T09:08:05Z", "type": "run_started", "data": {"question": "Quais são os trade-offs entre busca lexical e busca híbrida?"}}
-{"ts": "2026-11-15T09:09:08Z", "type": "llm_call", "data": {"task": "plan", "ok": true, "tokens": 342, "seconds": 63.46}}
-{"ts": "2026-11-15T09:09:08Z", "type": "planned", "data": {"questions": 3}}
-{"ts": "2026-11-15T09:09:08Z", "type": "round_started", "data": {"round": 1, "question": "Q1"}}
-{"ts": "2026-11-15T09:09:24Z", "type": "llm_call", "data": {"task": "query", "ok": true, "tokens": 40, "seconds": 15.85}}
-{"ts": "2026-11-15T09:09:24Z", "type": "search", "data": {"question": "Q1", "query": "lexical search vs hybrid search"}}
-{"ts": "2026-11-15T09:09:25Z", "type": "page_fetch", "data": {"url": "https://www.elastic.co/what-is/hybrid-search"}}

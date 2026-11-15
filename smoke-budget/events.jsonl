@@ -1,7 +1,0 @@
-{"ts": "2026-11-15T09:15:40Z", "type": "run_started", "data": {"question": "Quais são os trade-offs entre busca lexical e busca híbrida?"}}
-{"ts": "2026-11-15T09:17:05Z", "type": "llm_call", "data": {"task": "plan", "ok": true, "tokens": 378, "seconds": 84.65}}
-{"ts": "2026-11-15T09:17:05Z", "type": "planned", "data": {"questions": 3}}
-{"ts": "2026-11-15T09:17:05Z", "type": "round_started", "data": {"round": 1, "question": "Q1"}}
-{"ts": "2026-11-15T09:17:14Z", "type": "llm_call", "data": {"task": "query", "ok": true, "tokens": 40, "seconds": 9.47}}
-{"ts": "2026-11-15T09:17:14Z", "type": "search", "data": {"question": "Q1", "query": "lexical search vs hybrid search"}}
-{"ts": "2026-11-15T09:17:15Z", "type": "page_fetch", "data": {"url": "https://www.keyvalue.systems/blog/hybrid-rag-architecture/"}}
