@@ -31,11 +31,13 @@ def plan_prompt(question: str, restrictions: list[str]) -> str:
             else ""
         )
         + "\nDevolva JSON com:\n"
-        '- "objective": objetivo interpretado da pesquisa;\n'
-        '- "assumptions": premissas adotadas quando a pergunta é ambígua;\n'
-        '- "sufficiency_criteria": o que permitiria responder;\n'
-        '- "questions": lista com até 4 itens, cada um com "question", '
-        '"priority" (high|medium|low) e "sufficiency".\n'
+        '- "objective": objetivo interpretado da pesquisa (1 frase);\n'
+        '- "assumptions": premissas adotadas quando a pergunta é ambígua '
+        "(1 frase por premissa, no máximo 3);\n"
+        '- "sufficiency_criteria": o que permitiria responder (1 frase);\n'
+        '- "questions": lista com até 3 itens, cada um com "question" (1 frase), '
+        '"priority" (high|medium|low) e "sufficiency" (1 frase).\n'
+        "Seja conciso: cada campo é curto e objetivo. "
         "Use no máximo 1 questão se a pergunta for simples."
     )
 

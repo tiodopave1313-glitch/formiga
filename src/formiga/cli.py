@@ -41,6 +41,15 @@ def build_parser() -> argparse.ArgumentParser:
     research.add_argument(
         "--llamacpp-url", dest="llamacpp_url", help="Endpoint do llama-server (OpenAI-compatível)."
     )
+    research.add_argument(
+        "--llamacpp-thinking",
+        dest="llamacpp_thinking",
+        action="store_true",
+        help=(
+            "Deixar o modelo raciocinar antes do JSON (consome tokens de geração; "
+            "os limites por tarefa recebem folga extra). Default: desligado."
+        ),
+    )
     research.add_argument("--max-searches", dest="max_searches", type=int, help="Limite de buscas.")
     research.add_argument("--max-pages", dest="max_pages", type=int, help="Limite de páginas.")
     research.add_argument(
@@ -54,6 +63,15 @@ def build_parser() -> argparse.ArgumentParser:
         dest="llm_timeout",
         type=float,
         help="Timeout por chamada ao modelo (default 120; CPU lenta pode exigir mais).",
+    )
+    research.add_argument(
+        "--llm-temperature",
+        dest="llm_temperature",
+        type=float,
+        help=(
+            "Temperatura de amostragem (default 0.2; a Gemma 4 recomenda 1.0 "
+            "para uso geral)."
+        ),
     )
     research.add_argument(
         "--overwrite",

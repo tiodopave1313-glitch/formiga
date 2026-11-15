@@ -53,11 +53,13 @@ legível), mas **não são retomadas** no MVP.
 | `--searxng-url URL` | Endpoint da instância SearXNG (JSON habilitado) |
 | `--llm-backend {ollama,llamacpp}` | Backend do modelo (default: ollama) |
 | `--llamacpp-url URL` | Endpoint do llama-server (OpenAI-compatível) |
+| `--llamacpp-thinking` | Deixar o modelo raciocinar antes do JSON (default: desligado) |
 | `--max-searches N` | Limite de buscas (default 12) |
 | `--max-pages N` | Limite de páginas (default 18) |
 | `--max-llm-calls N` | Limite total de chamadas (default 40; 8 reservadas para síntese/auditoria) |
 | `--timeout-seconds N` | Tempo máximo da execução (default 900) |
 | `--llm-timeout-seconds N` | Timeout por chamada ao modelo (default 120; CPU lenta pode exigir mais) |
+| `--llm-temperature T` | Temperatura de amostragem (default 0.2; Gemma 4 recomenda 1.0 para uso geral) |
 | `--overwrite` | Autoriza sobrescrever um diretório de saída existente |
 | `--verbose` | Eventos operacionais no stderr |
 
@@ -72,6 +74,8 @@ FORMIGA_SEARXNG_URL=http://localhost:8080
 FORMIGA_LLM_BACKEND=ollama          # ou: llamacpp
 FORMIGA_LLAMACPP_URL=http://localhost:8080   # endpoint do llama-server
 FORMIGA_LLM_TIMEOUT=120             # timeout por chamada ao modelo (segundos)
+FORMIGA_LLM_TEMPERATURE=0.2         # temperatura de amostragem
+FORMIGA_LLAMACPP_THINKING=0         # 1 = deixar o modelo raciocinar antes do JSON
 ```
 
 O modelo padrão é uma escolha inicial de implementação, não uma exigência de
@@ -83,7 +87,7 @@ SearXNG própria com o formato JSON habilitado (`search.formats: [html, json]`).
 | Backend | Endpoint | Formato estruturado |
 |---|---|---|
 | `ollama` (default) | `POST /api/chat` com `format: "json"` | JSON; schema imposto pela validação do harness |
-| `llamacpp` | `POST /v1/chat/completions` (OpenAI-compatível) | `response_format: {"type": "json_object", "schema": ...}` — o llama-server converte o schema em gramática GBNF |
+| `llamacpp` | `POST /v1/chat/completions` (OpenAI-compatível) | `response_format: {"type": "json_object", "schema": ...}` — builds com suporte convertem o schema em gramática GBNF; sem suporte, a validação fica no harness |
 
 Para usar um `llama-server` compilado localmente:
 
@@ -96,6 +100,25 @@ Para usar um `llama-server` compilado localmente:
 Builds antigas do llama-server que não suportam `schema` dentro de
 `response_format` também funcionam — o campo é ignorado e a validação fica no
 harness.
+
+### Modelo adotado para o teste inicial: Gemma 4 E2B
+
+O smoke test usa [`google/gemma-4-E2B-it`](https://huggingface.co/google/gemma-4-E2B-it)
+(2,3B de parâmetros efetivos, contexto 128K, suporte nativo a `system` e a
+modelos de raciocínio). Detalhes que afetam o Formiga:
+
+- **Thinking**: a Gemma 4 raciocina antes de responder e o raciocínio
+  (`reasoning_content`) consome o teto de geração **antes** do JSON estruturado.
+  Por isso o Formiga envia `chat_template_kwargs: {"enable_thinking": false}`
+  por default ao llama-server. Para deixar o modelo raciocinar (os limites por
+  tarefa recebem folga extra de tokens), use `--llamacpp-thinking` ou
+  `FORMIGA_LLAMACPP_THINKING=1`.
+- **Amostragem**: `top_k=64` e `top_p=0.95` seguem a ficha do modelo; a
+  temperatura é configurável (`--llm-temperature`, default 0.2 para JSON
+  estruturado).
+- **Truncamento**: se o JSON for cortado no limite de geração, a segunda
+  tentativa dobra o teto (`finish_reason: "length"` é detectado). A resposta
+  bruta falha aparece no evento `llm_call` de `events.jsonl`.
 
 ## Smoke test manual
 

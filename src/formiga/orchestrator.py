@@ -25,7 +25,7 @@ from formiga.extract import (
     text_hash,
 )
 from formiga.fetch import FetchedPage, FetchError
-from formiga.llm import LLMResponse, StructuredCaller, TaskType
+from formiga.llm import REASONING_EXTRA_TOKENS, LLMResponse, StructuredCaller, TaskType
 from formiga.models import (
     Claim,
     ClaimType,
@@ -115,7 +115,13 @@ def run_research(
 
         fetcher = SafeFetcher(config, remaining_seconds=budget.remaining_seconds)
 
-    def on_llm_call(_task: TaskType, _ok: bool, tokens: int | None, seconds: float | None) -> None:
+    def on_llm_call(
+        _task: TaskType,
+        _ok: bool,
+        tokens: int | None,
+        seconds: float | None,
+        info: dict | None = None,
+    ) -> None:
         # Toda tentativa, inclusive falha e correção de formato, consome orçamento.
         reserved = _task in (TaskType.SYNTHESIZE, TaskType.AUDIT)
         budget.consume_llm(reserved=reserved)
@@ -128,18 +134,22 @@ def run_research(
             state.token_usage["unknown_calls"] = (
                 state.token_usage.get("unknown_calls", 0) + 1
             )
-        append_event(
-            output_dir,
-            "llm_call",
-            {
-                "task": _task.value,
-                "ok": _ok,
-                "tokens": tokens,
-                "seconds": round(seconds, 2) if seconds is not None else None,
-            },
-        )
+        event = {
+            "task": _task.value,
+            "ok": _ok,
+            "tokens": tokens,
+            "seconds": round(seconds, 2) if seconds is not None else None,
+        }
+        # Diagnóstico de falha: erro de validação, truncamento e resposta bruta.
+        if info:
+            event.update({k: v for k, v in info.items() if v is not None})
+        append_event(output_dir, "llm_call", event)
 
-    caller = StructuredCaller(client, on_call=on_llm_call)
+    caller = StructuredCaller(
+        client,
+        on_call=on_llm_call,
+        extra_tokens=REASONING_EXTRA_TOKENS if config.llamacpp_thinking else 0,
+    )
     state = ResearchState(contract=ResearchContract(question=config.question or "", objective=""))
 
     # --- RF-01/RF-02: contrato e planejamento -------------------------------

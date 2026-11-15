@@ -1,106 +1,37 @@
 {
   "contract": {
-    "question": "Quais são os trade-offs entre busca lexical e busca híbrida?",
-    "objective": "comparar os trade-offs entre busca lexical e busca híbrida, detalhando as dimensões de trade-off e os fatores que as influenciam.",
-    "assumptions": [
-      "busca lexical é a baseline (term matching); busca híbrida é tipicamente dense + sparse.",
-      "trade-offs são multi-dimensionais (recall, precisão, latência, custo, interpretabilidade, escalabilidade).",
-      "a pergunta não se refere a sistemas de busca em geral, mas a sistemas de recuperação de informação.",
-      "trade-offs são contextuais: o que é um trade-off em um domínio de baixa latência é diferente de um domínio de pesquisa."
-    ],
+    "question": "Quais são os trade-offs entre busca lexical e busca híbida?",
+    "objective": "",
+    "assumptions": [],
     "restrictions": [],
-    "sufficiency_criteria": [
-      "definições claras dos dois sistemas e suas diferenças fundamentais",
-      "um framework para comparar os trade-offs (ex: recall vs. precisão, latência vs. custo)",
-      "explicação da combinação densa + lexical",
-      "discussão sobre trade-offs de implementação e avaliação",
-      "discussão sobre trade-offs contextuais"
-    ],
-    "created_at": "2026-11-15T08:05:31Z"
+    "sufficiency_criteria": [],
+    "created_at": "2026-11-15T08:19:20Z"
   },
-  "questions": [
-    {
-      "id": "Q1",
-      "question": "Quais são as dimensões de trade-off entre busca lexical e busca híbrida (recall, precisão, latência, interpretabilidade, custo de implementação)?",
-      "priority": "high",
-      "sufficiency": "permite comparar as duas abordagens em múltiplos e mensuráveis critérios.",
-      "status": "SEARCHING",
-      "attempts": 1,
-      "evidence_ids": [],
-      "limitation": null,
-      "depth": 1
-    },
-    {
-      "id": "Q2",
-      "question": "Como a busca híbrida combina busca densa e busca lexical (e quais são os trade-offs dessa combinação)?",
-      "priority": "high",
-      "sufficiency": "explica a mecânica da busca híbrida, que é o foco da pergunta.",
-      "status": "OPEN",
-      "attempts": 0,
-      "evidence_ids": [],
-      "limitation": null,
-      "depth": 1
-    },
-    {
-      "id": "Q3",
-      "question": "Quais são os trade-offs de implementação e avaliação (custo computacional, infraestrutura, métricas de avaliação)?",
-      "priority": "medium",
-      "sufficiency": "aborda a parte prática da pesquisa.",
-      "status": "OPEN",
-      "attempts": 0,
-      "evidence_ids": [],
-      "limitation": null,
-      "depth": 1
-    },
-    {
-      "id": "Q4",
-      "question": "Quais são os trade-offs de contexto (domínio, tipo de dados, requisitos de latência, escalabilidade)?",
-      "priority": "medium",
-      "sufficiency": "explica onde os trade-offs se manifestam de forma diferente.",
-      "status": "OPEN",
-      "attempts": 0,
-      "evidence_ids": [],
-      "limitation": null,
-      "depth": 1
-    }
-  ],
-  "sources": [
-    {
-      "id": "S1",
-      "requested_url": "https://arxiv.org/html/2508.01405v2",
-      "final_url": "https://arxiv.org/html/2508.01405v2",
-      "title": null,
-      "accessed_at": "2026-11-15T08:06:33Z",
-      "published_at": null,
-      "text_hash": null,
-      "extraction_status": "FAILED",
-      "failure_reason": "Extração de texto falhou."
-    }
-  ],
+  "questions": [],
+  "sources": [],
   "evidence": [],
   "claims": [],
-  "budget": {},
-  "token_usage": {
-    "known_tokens": 1574
+  "budget": {
+    "rounds": 0,
+    "max_rounds": 8,
+    "searches": 0,
+    "max_searches": 12,
+    "pages_fetched": 0,
+    "max_pages": 18,
+    "llm_investigation_calls": 2,
+    "llm_reserved_calls": 0,
+    "max_llm_calls": 40,
+    "reserved_llm_calls": 8,
+    "remaining_seconds": 3481.01
   },
-  "status": "parcial",
-  "stop_reason": null,
-  "round_number": 1,
-  "query_history": [
-    {
-      "question_id": "Q1",
-      "query": "trade-offs lexical vs hybrid search recall precision latency interpretability cost",
-      "normalized_query": "trade-offs lexical vs hybrid search recall precision latency interpretability cost"
-    },
-    {
-      "question_id": "Q1",
-      "query": "hybrid search fusion points query vs document",
-      "normalized_query": "hybrid search fusion points query vs document"
-    }
-  ],
+  "token_usage": {
+    "known_tokens": 1024
+  },
+  "status": "bloqueada",
+  "stop_reason": "Falha no planejamento.",
+  "round_number": 0,
+  "query_history": [],
   "operational_failures": [
-    "Extração de texto falhou para https://arxiv.org/html/2508.01405v2; limitação registrada.",
-    "Página inacessível (https://arxiv.org/pdf/2508.01405): Conteúdo excede 2097152 bytes.",
-    "Página inacessível (https://journal.aptika.org/index.php/jistics/article/download/245/40): Tipo de conteúdo não suportado: application/pdf."
+    "Planejamento falhou (schema inválido após correção); pesquisa bloqueada."
   ]
 }

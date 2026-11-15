@@ -28,6 +28,7 @@ class OllamaClient:
         self.url = config.ollama_url.rstrip("/")
         self.model = config.model
         self.llm_timeout = config.llm_timeout
+        self.temperature = config.llm_temperature
         self._remaining = remaining_seconds
         self._transport = transport
 
@@ -45,6 +46,7 @@ class OllamaClient:
         max_tokens: int | None = None,
     ) -> LLMResponse:
         # O Ollama usa `format: "json"`; o schema é imposto pela validação do harness.
+        # top_k/top_p seguem a recomendação de amostragem da Gemma 4.
         payload: dict = {
             "model": self.model,
             "messages": [
@@ -53,7 +55,11 @@ class OllamaClient:
             ],
             "stream": False,
             "format": "json",
-            "options": {"temperature": 0.2},
+            "options": {
+                "temperature": self.temperature,
+                "top_k": 64,
+                "top_p": 0.95,
+            },
         }
         if max_tokens is not None:
             payload["options"]["num_predict"] = max_tokens
@@ -74,4 +80,9 @@ class OllamaClient:
             raise OllamaError(f"Resposta do Ollama sem conteúdo: {data!r}") from exc
         # Tokens: registrar quando o backend fornece; `unknown` caso contrário.
         tokens = data.get("eval_count")
-        return LLMResponse(content=content, tokens=tokens if isinstance(tokens, int) else None)
+        # `done_reason: "length"` = cortado no limite de geração (builds recentes).
+        truncated = data.get("done_reason") == "length"
+        return LLMResponse(
+            content=content, tokens=tokens if isinstance(tokens, int) else None,
+            truncated=truncated,
+        )

@@ -32,7 +32,7 @@ class TaskType(enum.StrEnum):
 # Limites de geração por tarefa: travam loops de JSON e mantêm cada chamada
 # dentro do timeout em geração lenta (CPU). Síntese é a saída mais longa.
 TASK_MAX_TOKENS: dict[TaskType, int] = {
-    TaskType.PLAN: 512,
+    TaskType.PLAN: 1024,  # planejamento é o JSON mais verboso; 512 truncava
     TaskType.QUERY: 128,
     TaskType.EXTRACT: 512,
     TaskType.VERIFY: 128,
@@ -41,11 +41,22 @@ TASK_MAX_TOKENS: dict[TaskType, int] = {
     TaskType.AUDIT: 512,
 }
 
+# Teto absoluto quando uma resposta truncada pede mais espaço (cap dobrado).
+MAX_GENERATION_TOKENS = 2048
+
+# Conteúdo bruto logado em evento quando a validação falha (diagnóstico).
+RAW_LOG_CHARS = 300
+
+# Modelos de raciocínio geram `reasoning_content` antes do JSON; quando o
+# thinking está ligado, os caps por tarefa recebem esse adicional.
+REASONING_EXTRA_TOKENS = 384
+
 
 @dataclass
 class LLMResponse:
     content: str
     tokens: int | None = None  # `unknown` quando o backend não fornece contagem.
+    truncated: bool = False  # True quando terminou por limite de geração.
 
 
 class LLMError(Exception):
@@ -85,6 +96,8 @@ class CallRecord:
     tokens: int | None = None  # `unknown` quando o backend não fornece contagem.
     seconds: float | None = None
     error: str | None = None
+    truncated: bool = False
+    raw: str | None = None  # conteúdo bruto (truncado) quando a validação falha.
     ts: str = field(default_factory=utc_now)
 
 
@@ -98,10 +111,13 @@ class StructuredCaller:
     def __init__(
         self,
         client: LLMClient,
-        on_call: Callable[[TaskType, bool, int | None, float | None], None] | None = None,
+        on_call: Callable[[TaskType, bool, int | None, float | None, dict | None], None]
+        | None = None,
+        extra_tokens: int = 0,
     ) -> None:
         self.client = client
         self.on_call = on_call
+        self.extra_tokens = extra_tokens  # folga p/ raciocínio (thinking ligado)
         self.records: list[CallRecord] = []
 
     def call(
@@ -119,7 +135,11 @@ class StructuredCaller:
         error_feedback: str | None = None
         attempts = 0
         last_error: str = ""
-        max_tokens = TASK_MAX_TOKENS.get(task)
+        last_raw: str | None = None
+        last_truncated = False
+        effective_cap = TASK_MAX_TOKENS.get(task)
+        if effective_cap is not None:
+            effective_cap += self.extra_tokens
         for _ in range(1 + 1):  # tentativa original + 1 correção de formato
             attempts += 1
             prompt = user if error_feedback is None else (
@@ -129,12 +149,12 @@ class StructuredCaller:
             started = time.monotonic()
             try:
                 response = self.client.complete(
-                    system, prompt, schema.model_json_schema(), max_tokens
+                    system, prompt, schema.model_json_schema(), effective_cap
                 )
             except LLMError as exc:
                 seconds = time.monotonic() - started
                 self._record(task, False, attempts, None, seconds, str(exc))
-                self._notify(task, False, None, seconds)
+                self._notify(task, False, None, seconds, {"error": str(exc)})
                 return None
             seconds = time.monotonic() - started
             ok, parsed, err = _parse_and_validate(response.content, schema)
@@ -143,9 +163,23 @@ class StructuredCaller:
                 self._notify(task, True, response.tokens, seconds)
                 return parsed
             last_error = err
-            self._notify(task, False, response.tokens, seconds)
-            error_feedback = err
-        self._record(task, False, attempts, None, None, last_error)
+            last_raw = response.content[:RAW_LOG_CHARS]
+            last_truncated = response.truncated
+            info = {"error": err, "raw": last_raw, "truncated": response.truncated}
+            if effective_cap is not None:
+                info["max_tokens"] = effective_cap
+            self._notify(task, False, response.tokens, seconds, info)
+            if response.truncated and effective_cap is not None:
+                # JSON cortado no limite de geração: corrigir "formato" não
+                # resolve; a segunda tentativa ganha mais espaço de saída.
+                effective_cap = min(effective_cap * 2, MAX_GENERATION_TOKENS)
+                error_feedback = None  # o erro não é de formato, é de espaço
+            else:
+                error_feedback = err
+        self._record(
+            task, False, attempts, None, None, last_error,
+            truncated=last_truncated, raw=last_raw,
+        )
         return None
 
     def _record(
@@ -156,19 +190,26 @@ class StructuredCaller:
         tokens: int | None = None,
         seconds: float | None = None,
         error: str | None = None,
+        truncated: bool = False,
+        raw: str | None = None,
     ) -> None:
         self.records.append(
             CallRecord(
                 task=task, ok=ok, attempts=attempts, tokens=tokens,
-                seconds=seconds, error=error,
+                seconds=seconds, error=error, truncated=truncated, raw=raw,
             )
         )
 
     def _notify(
-        self, task: TaskType, ok: bool, tokens: int | None, seconds: float | None
+        self,
+        task: TaskType,
+        ok: bool,
+        tokens: int | None,
+        seconds: float | None,
+        info: dict | None = None,
     ) -> None:
         if self.on_call is not None:
-            self.on_call(task, ok, tokens, seconds)
+            self.on_call(task, ok, tokens, seconds, info)
 
 
 def _parse_and_validate(

@@ -29,6 +29,10 @@ class LlamaCppClient:
     ) -> None:
         self.url = config.llamacpp_url.rstrip("/")
         self.llm_timeout = config.llm_timeout
+        self.temperature = config.llm_temperature
+        # Modelos de raciocínio: desligar o thinking por default — o
+        # `reasoning_content` consome o teto de geração antes do JSON.
+        self.disable_thinking = not config.llamacpp_thinking
         self._remaining = remaining_seconds
         self._transport = transport
 
@@ -45,15 +49,20 @@ class LlamaCppClient:
         json_schema: dict | None = None,
         max_tokens: int | None = None,
     ) -> LLMResponse:
+        # top_k/top_p seguem a recomendação de amostragem da Gemma 4.
         payload: dict = {
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
-            "temperature": 0.2,
+            "temperature": self.temperature,
+            "top_k": 64,
+            "top_p": 0.95,
             "stream": False,
             "response_format": {"type": "json_object"},
         }
+        if self.disable_thinking:
+            payload["chat_template_kwargs"] = {"enable_thinking": False}
         if json_schema is not None:
             payload["response_format"]["schema"] = json_schema
         if max_tokens is not None:
@@ -75,4 +84,9 @@ class LlamaCppClient:
             raise LlamaCppError(f"Resposta do llama-server sem conteúdo: {data!r}") from exc
         usage = data.get("usage") or {}
         tokens = usage.get("completion_tokens")
-        return LLMResponse(content=content, tokens=tokens if isinstance(tokens, int) else None)
+        # `finish_reason: "length"` = cortado no limite de geração (JSON truncado).
+        truncated = data["choices"][0].get("finish_reason") == "length"
+        return LLMResponse(
+            content=content, tokens=tokens if isinstance(tokens, int) else None,
+            truncated=truncated,
+        )

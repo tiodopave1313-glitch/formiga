@@ -24,19 +24,29 @@ DEFAULT_NO_PROGRESS_ROUNDS = 2
 DEFAULT_FORMAT_RETRIES = 1
 DEFAULT_MAX_HTTP_BYTES = 2 * 1024 * 1024
 DEFAULT_NETWORK_TIMEOUT = 20.0
-DEFAULT_LLM_TIMEOUT = 120.0  # geração do 8B em CPU leva dezenas de segundos
+DEFAULT_LLM_TIMEOUT = 120.0  # geração do modelo em CPU leva dezenas de segundos
+# Gemma 4 recomenda temperature=1.0; para JSON estruturado baixamos por default
+# e deixamos configurável (FORMIGA_LLM_TEMPERATURE / --llm-temperature).
+DEFAULT_LLM_TEMPERATURE = 0.2
 
 ENV_LLM_TIMEOUT = "FORMIGA_LLM_TIMEOUT"
+ENV_LLM_TEMPERATURE = "FORMIGA_LLM_TEMPERATURE"
 
 ENV_MODEL = "FORMIGA_MODEL"
 ENV_OLLAMA_URL = "FORMIGA_OLLAMA_URL"
 ENV_SEARXNG_URL = "FORMIGA_SEARXNG_URL"
 ENV_LLM_BACKEND = "FORMIGA_LLM_BACKEND"
 ENV_LLAMACPP_URL = "FORMIGA_LLAMACPP_URL"
+ENV_LLAMACPP_THINKING = "FORMIGA_LLAMACPP_THINKING"
 
 LLM_BACKENDS = ("ollama", "llamacpp")
 DEFAULT_LLM_BACKEND = "ollama"
 DEFAULT_LLAMACPP_URL = "http://localhost:8080"  # porta default do llama-server
+# Modelos de raciocínio (ex.: Gemma Forge) pensam antes do JSON e podem
+# consumir o teto de geração com `reasoning_content`. Default: desligado,
+# pois os caps por tarefa são pequenos. Modelos sem o kwarg no template
+# podem rejeitar; aí ative o thinking explicitamente.
+DEFAULT_LLAMACPP_THINKING = False
 
 
 class ConfigError(ValueError):
@@ -67,6 +77,7 @@ class Config:
     searxng_url: str = DEFAULT_SEARXNG_URL
     llm_backend: str = DEFAULT_LLM_BACKEND
     llamacpp_url: str = DEFAULT_LLAMACPP_URL
+    llamacpp_thinking: bool = DEFAULT_LLAMACPP_THINKING
     verbose: bool = False
     overwrite: bool = False
 
@@ -86,6 +97,7 @@ class Config:
     max_http_bytes: int = DEFAULT_MAX_HTTP_BYTES
     network_timeout: float = DEFAULT_NETWORK_TIMEOUT
     llm_timeout: float = DEFAULT_LLM_TIMEOUT
+    llm_temperature: float = DEFAULT_LLM_TEMPERATURE
 
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> Config:
@@ -101,11 +113,25 @@ class Config:
             config = replace(config, llm_backend=backend)
         if (llamacpp := _env(env, ENV_LLAMACPP_URL)) is not None:
             config = replace(config, llamacpp_url=llamacpp)
+        if (thinking := _env(env, ENV_LLAMACPP_THINKING)) is not None:
+            flag = thinking.lower() in ("1", "true", "yes", "on")
+            if not flag and thinking.lower() not in ("0", "false", "no", "off"):
+                raise ConfigError(
+                    f"FORMIGA_LLAMACPP_THINKING não é booleano: {thinking!r}."
+                )
+            config = replace(config, llamacpp_thinking=flag)
         if (llm_timeout := _env(env, ENV_LLM_TIMEOUT)) is not None:
             try:
                 config = replace(config, llm_timeout=float(llm_timeout))
             except ValueError as exc:
                 raise ConfigError(f"FORMIGA_LLM_TIMEOUT não é um número: {llm_timeout!r}.") from exc
+        if (temperature := _env(env, ENV_LLM_TEMPERATURE)) is not None:
+            try:
+                config = replace(config, llm_temperature=float(temperature))
+            except ValueError as exc:
+                raise ConfigError(
+                    f"FORMIGA_LLM_TEMPERATURE não é um número: {temperature!r}."
+                ) from exc
         config.validate()
         return config
 
@@ -123,6 +149,7 @@ class Config:
             "searxng_url",
             "llm_backend",
             "llamacpp_url",
+            "llamacpp_thinking",
             "verbose",
             "overwrite",
             "max_initial_questions",
@@ -140,6 +167,7 @@ class Config:
             "max_http_bytes",
             "network_timeout",
             "llm_timeout",
+            "llm_temperature",
         ):
             value = getattr(args, key, None)
             if value is not None and value != getattr(self, key):
@@ -172,6 +200,10 @@ class Config:
             value = getattr(self, name)
             if value <= 0:
                 raise ConfigError(f"{name} deve ser positivo (recebido: {value}).")
+        if not 0 <= self.llm_temperature <= 2:
+            raise ConfigError(
+                f"llm_temperature deve estar em [0, 2] (recebido: {self.llm_temperature})."
+            )
         if self.reserved_llm_calls > self.max_llm_calls:
             raise ConfigError(
                 "reserved_llm_calls não pode exceder max_llm_calls "
