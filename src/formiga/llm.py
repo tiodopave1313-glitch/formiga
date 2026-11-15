@@ -35,9 +35,15 @@ class LLMResponse:
 
 
 class LLMClient(Protocol):
-    """Cliente de modelo: uma tarefa por chamada, sem histórico acumulado."""
+    """Cliente de modelo: uma tarefa por chamada, sem histórico acumulado.
 
-    def complete(self, system: str, user: str) -> LLMResponse: ...
+    `json_schema` é opcional: backends com restrição gramatical (llama.cpp)
+    podem usá-lo; backends sem suporte o ignoram.
+    """
+
+    def complete(
+        self, system: str, user: str, json_schema: dict | None = None
+    ) -> LLMResponse: ...
 
 
 class StructuredCallError(Exception):
@@ -92,7 +98,7 @@ class StructuredCaller:
                 f"{user}\n\nA resposta anterior era inválida. Erro objetivo: "
                 f"{error_feedback}\nCorrija e devolva novamente apenas o JSON."
             )
-            response = self.client.complete(system, prompt)
+            response = self.client.complete(system, prompt, schema.model_json_schema())
             ok, parsed, err = _parse_and_validate(response.content, schema)
             if ok:
                 self._record(task, True, attempts, response.tokens)

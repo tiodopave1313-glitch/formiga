@@ -478,7 +478,7 @@ def test_page_injection_does_not_change_flow(tmp_path: Path):
 
 def test_interrupt_leaves_checkpoint_intact(tmp_path: Path):
     class InterruptingLLM(FakeLLM):
-        def complete(self, system, user):
+        def complete(self, system, user, json_schema=None):
             if user.startswith("Tarefa: propor"):
                 raise KeyboardInterrupt()
             return super().complete(system, user)

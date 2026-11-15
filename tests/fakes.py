@@ -27,7 +27,7 @@ class FakeLLM:
         self.overrides = overrides or {}
         self.calls: list[tuple[TaskType, str]] = []
 
-    def complete(self, system: str, user: str) -> LLMResponse:
+    def complete(self, system: str, user: str, json_schema: dict | None = None) -> LLMResponse:
         task = self._current_task(user)
         self.calls.append((task, user))
         if task in self.overrides:

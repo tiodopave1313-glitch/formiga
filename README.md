@@ -51,6 +51,8 @@ legível), mas **não são retomadas** no MVP.
 | `--model NAME` | Nome do modelo no Ollama |
 | `--ollama-url URL` | Endpoint do Ollama |
 | `--searxng-url URL` | Endpoint da instância SearXNG (JSON habilitado) |
+| `--llm-backend {ollama,llamacpp}` | Backend do modelo (default: ollama) |
+| `--llamacpp-url URL` | Endpoint do llama-server (OpenAI-compatível) |
 | `--max-searches N` | Limite de buscas (default 12) |
 | `--max-pages N` | Limite de páginas (default 18) |
 | `--max-llm-calls N` | Limite total de chamadas (default 40; 8 reservadas para síntese/auditoria) |
@@ -66,11 +68,32 @@ Precedência: argumento da CLI > variável de ambiente > valor padrão.
 FORMIGA_MODEL=llama3.1:8b
 FORMIGA_OLLAMA_URL=http://localhost:11434
 FORMIGA_SEARXNG_URL=http://localhost:8080
+FORMIGA_LLM_BACKEND=ollama          # ou: llamacpp
+FORMIGA_LLAMACPP_URL=http://localhost:8080   # endpoint do llama-server
 ```
 
 O modelo padrão é uma escolha inicial de implementação, não uma exigência de
-qualidade. Instale-o antes no Ollama e configure uma instância SearXNG própria
-com o formato JSON habilitado (`search`? `format=json`).
+qualidade. Instale-o antes no backend escolhido e configure uma instância
+SearXNG própria com o formato JSON habilitado (`search.formats: [html, json]`).
+
+### Backends de modelo
+
+| Backend | Endpoint | Formato estruturado |
+|---|---|---|
+| `ollama` (default) | `POST /api/chat` com `format: "json"` | JSON; schema imposto pela validação do harness |
+| `llamacpp` | `POST /v1/chat/completions` (OpenAI-compatível) | `response_format: {"type": "json_object", "schema": ...}` — o llama-server converte o schema em gramática GBNF |
+
+Para usar um `llama-server` compilado localmente:
+
+```bash
+.venv/bin/formiga research "..." \
+  --llm-backend llamacpp --llamacpp-url http://127.0.0.1:9931 \
+  --output ./pesquisa-formiga
+```
+
+Builds antigas do llama-server que não suportam `schema` dentro de
+`response_format` também funcionam — o campo é ignorado e a validação fica no
+harness.
 
 ## Smoke test manual
 
@@ -126,6 +149,7 @@ formiga/
 │   ├── prompts.py         # prompts por tarefa (dados delimitados)
 │   ├── schemas.py         # schemas das propostas do modelo
 │   ├── ollama.py          # cliente Ollama
+│   ├── llamacpp.py        # cliente llama-server (OpenAI-compatível)
 │   ├── searxng.py         # cliente SearXNG JSON
 │   ├── fetcher.py         # fetch seguro (seção 13 do PRD)
 │   ├── extract.py         # Trafilatura, trechos, seleção lexical

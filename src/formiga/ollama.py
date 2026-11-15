@@ -23,7 +23,10 @@ class OllamaClient:
         self.timeout = config.network_timeout
         self._transport = transport
 
-    def complete(self, system: str, user: str) -> LLMResponse:
+    def complete(
+        self, system: str, user: str, json_schema: dict | None = None
+    ) -> LLMResponse:
+        # O Ollama usa `format: "json"`; o schema é imposto pela validação do harness.
         payload = {
             "model": self.model,
             "messages": [

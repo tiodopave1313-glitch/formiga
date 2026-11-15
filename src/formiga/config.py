@@ -28,6 +28,12 @@ DEFAULT_NETWORK_TIMEOUT = 20.0
 ENV_MODEL = "FORMIGA_MODEL"
 ENV_OLLAMA_URL = "FORMIGA_OLLAMA_URL"
 ENV_SEARXNG_URL = "FORMIGA_SEARXNG_URL"
+ENV_LLM_BACKEND = "FORMIGA_LLM_BACKEND"
+ENV_LLAMACPP_URL = "FORMIGA_LLAMACPP_URL"
+
+LLM_BACKENDS = ("ollama", "llamacpp")
+DEFAULT_LLM_BACKEND = "ollama"
+DEFAULT_LLAMACPP_URL = "http://localhost:8080"  # porta default do llama-server
 
 
 class ConfigError(ValueError):
@@ -56,6 +62,8 @@ class Config:
     model: str = DEFAULT_MODEL
     ollama_url: str = DEFAULT_OLLAMA_URL
     searxng_url: str = DEFAULT_SEARXNG_URL
+    llm_backend: str = DEFAULT_LLM_BACKEND
+    llamacpp_url: str = DEFAULT_LLAMACPP_URL
     verbose: bool = False
     overwrite: bool = False
 
@@ -85,6 +93,10 @@ class Config:
             config = replace(config, ollama_url=ollama)
         if (searxng := _env(env, ENV_SEARXNG_URL)) is not None:
             config = replace(config, searxng_url=searxng)
+        if (backend := _env(env, ENV_LLM_BACKEND)) is not None:
+            config = replace(config, llm_backend=backend)
+        if (llamacpp := _env(env, ENV_LLAMACPP_URL)) is not None:
+            config = replace(config, llamacpp_url=llamacpp)
         config.validate()
         return config
 
@@ -100,6 +112,8 @@ class Config:
             "model",
             "ollama_url",
             "searxng_url",
+            "llm_backend",
+            "llamacpp_url",
             "verbose",
             "overwrite",
             "max_initial_questions",
@@ -157,9 +171,17 @@ class Config:
             raise ConfigError(
                 "max_initial_questions não pode exceder max_total_questions."
             )
-        for name, url in (("ollama_url", self.ollama_url), ("searxng_url", self.searxng_url)):
+        for name, url in (
+            ("ollama_url", self.ollama_url),
+            ("searxng_url", self.searxng_url),
+            ("llamacpp_url", self.llamacpp_url),
+        ):
             if not (url.startswith("http://") or url.startswith("https://")):
                 raise ConfigError(f"{name} deve ser uma URL http(s): {url!r}.")
+        if self.llm_backend not in LLM_BACKENDS:
+            raise ConfigError(
+                f"llm_backend inválido: {self.llm_backend!r} (use um de {LLM_BACKENDS})."
+            )
 
     @property
     def investigation_llm_calls(self) -> int:

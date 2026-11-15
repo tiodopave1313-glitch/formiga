@@ -62,7 +62,20 @@ ProgressFn = Callable[[str], None]
 
 
 class LLMClientProtocol(Protocol):
-    def complete(self, system: str, user: str) -> LLMResponse: ...
+    def complete(
+        self, system: str, user: str, json_schema: dict | None = None
+    ) -> LLMResponse: ...
+
+
+def build_llm_client(config: Config) -> LLMClientProtocol:
+    """Escolhe o backend de modelo conforme `config.llm_backend`."""
+    if config.llm_backend == "llamacpp":
+        from formiga.llamacpp import LlamaCppClient
+
+        return LlamaCppClient(config)
+    from formiga.ollama import OllamaClient
+
+    return OllamaClient(config)
 
 
 @dataclass
@@ -90,9 +103,7 @@ def run_research(
     progress(f"Saída: {output_dir}")
 
     if client is None:
-        from formiga.ollama import OllamaClient
-
-        client = OllamaClient(config)
+        client = build_llm_client(config)
     if search is None:
         from formiga.searxng import SearxngSearch
 

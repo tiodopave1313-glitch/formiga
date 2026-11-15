@@ -32,6 +32,15 @@ def build_parser() -> argparse.ArgumentParser:
     research.add_argument(
         "--searxng-url", dest="searxng_url", help="Endpoint da instância SearXNG."
     )
+    research.add_argument(
+        "--llm-backend",
+        dest="llm_backend",
+        choices=["ollama", "llamacpp"],
+        help="Backend do modelo: API do Ollama ou llama-server (llama.cpp).",
+    )
+    research.add_argument(
+        "--llamacpp-url", dest="llamacpp_url", help="Endpoint do llama-server (OpenAI-compatível)."
+    )
     research.add_argument("--max-searches", dest="max_searches", type=int, help="Limite de buscas.")
     research.add_argument("--max-pages", dest="max_pages", type=int, help="Limite de páginas.")
     research.add_argument(
