@@ -179,6 +179,7 @@ class ResearchState(BaseModel):
     evidence: list[Evidence] = Field(default_factory=list)
     claims: list[Claim] = Field(default_factory=list)
     budget: dict[str, Any] = Field(default_factory=dict)
+    token_usage: dict[str, int] = Field(default_factory=dict)
     status: str = "parcial"
     stop_reason: str | None = None
     round_number: int = 0

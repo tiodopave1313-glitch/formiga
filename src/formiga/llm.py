@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import enum
 import json
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -53,6 +54,7 @@ class CallRecord:
     task: TaskType
     ok: bool
     attempts: int
+    tokens: int | None = None  # `unknown` quando o backend não fornece contagem.
     error: str | None = None
     ts: str = field(default_factory=utc_now)
 
@@ -67,7 +69,7 @@ class StructuredCaller:
     def __init__(
         self,
         client: LLMClient,
-        on_call: callable[[TaskType, bool], None] | None = None,
+        on_call: Callable[[TaskType, bool, int | None], None] | None = None,
     ) -> None:
         self.client = client
         self.on_call = on_call
@@ -93,21 +95,30 @@ class StructuredCaller:
             response = self.client.complete(system, prompt)
             ok, parsed, err = _parse_and_validate(response.content, schema)
             if ok:
-                self._record(task, True, attempts)
-                self._notify(task, True)
+                self._record(task, True, attempts, response.tokens)
+                self._notify(task, True, response.tokens)
                 return parsed
             last_error = err
-            self._notify(task, False)
+            self._notify(task, False, response.tokens)
             error_feedback = err
-        self._record(task, False, attempts, last_error)
+        self._record(task, False, attempts, None, last_error)
         return None
 
-    def _record(self, task: TaskType, ok: bool, attempts: int, error: str | None = None) -> None:
-        self.records.append(CallRecord(task=task, ok=ok, attempts=attempts, error=error))
+    def _record(
+        self,
+        task: TaskType,
+        ok: bool,
+        attempts: int,
+        tokens: int | None = None,
+        error: str | None = None,
+    ) -> None:
+        self.records.append(
+            CallRecord(task=task, ok=ok, attempts=attempts, tokens=tokens, error=error)
+        )
 
-    def _notify(self, task: TaskType, ok: bool) -> None:
+    def _notify(self, task: TaskType, ok: bool, tokens: int | None) -> None:
         if self.on_call is not None:
-            self.on_call(task, ok)
+            self.on_call(task, ok, tokens)
 
 
 def _parse_and_validate(

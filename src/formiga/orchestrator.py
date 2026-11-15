@@ -44,6 +44,7 @@ from formiga.models import (
 from formiga.report import render_report, source_refs
 from formiga.schemas import (
     AuditProposal,
+    CompareProposal,
     ExtractProposal,
     PlanProposal,
     QueryProposal,
@@ -101,10 +102,19 @@ def run_research(
 
         fetcher = SafeFetcher(config, remaining_seconds=budget.remaining_seconds)
 
-    def on_llm_call(_task: TaskType, _ok: bool) -> None:
+    def on_llm_call(_task: TaskType, _ok: bool, tokens: int | None) -> None:
         # Toda tentativa, inclusive falha e correção de formato, consome orçamento.
         reserved = _task in (TaskType.SYNTHESIZE, TaskType.AUDIT)
         budget.consume_llm(reserved=reserved)
+        # Tokens: registrar quando disponíveis; `unknown` quando não fornecidos.
+        if tokens is not None:
+            state.token_usage["known_tokens"] = (
+                state.token_usage.get("known_tokens", 0) + tokens
+            )
+        else:
+            state.token_usage["unknown_calls"] = (
+                state.token_usage.get("unknown_calls", 0) + 1
+            )
 
     caller = StructuredCaller(client, on_call=on_llm_call)
     state = ResearchState(contract=ResearchContract(question=config.question or "", objective=""))
@@ -253,11 +263,62 @@ def _mark_no_progress(question: Question, state: ResearchState) -> None:
         )
 
 
+def _compare_conflict(
+    caller: StructuredCaller,
+    state: ResearchState,
+    budget: Budget,
+    question: Question,
+    output_dir: Path,
+) -> None:
+    """RF-07: compara afirmações divergentes; nunca escolhe vencedora por fluência."""
+    if not budget.can_call_llm():
+        question.limitation = "Conflito não comparado por falta de orçamento."
+        return
+    divergent = [
+        c for c in _claims_of_question(state, question.id)
+        if c.verification
+        and c.verification.label in (VerificationLabel.DIRECT_SUPPORT,
+                                     VerificationLabel.CONTRADICTED)
+    ]
+    claim_rows = [
+        {"id": c.id, "text": c.text, "label": c.verification.label.value} for c in divergent
+    ]
+    evidence_rows = []
+    for c in divergent:
+        for eid in c.evidence_ids:
+            e = state.evidence_by_id(eid)
+            evidence_rows.append({"id": e.id, "source_id": e.source_id, "quote": e.quote})
+    proposal = caller.call(
+        TaskType.COMPARE,
+        prompts.SYSTEM,
+        prompts.compare_prompt(claim_rows, evidence_rows),
+        CompareProposal,
+    )
+    if proposal is None:
+        question.limitation = "Conflito não resolvido (comparação falhou)."
+        return
+    if proposal.resolved:
+        question.limitation = f"Conflito resolvido por escopo: {proposal.explanation}"
+    else:
+        question.limitation = f"Conflito não resolvido: {proposal.explanation}"
+    append_event(
+        output_dir,
+        "conflict_compared",
+        {"question": question.id, "resolved": proposal.resolved},
+    )
+
+
 def _claims_of_question(state: ResearchState, qid: str) -> list[Claim]:
     return [c for c in state.claims if qid in c.question_ids]
 
 
-def _update_question_status(state: ResearchState, qid: str, output_dir: Path) -> bool:
+def _update_question_status(
+    caller: StructuredCaller,
+    state: ResearchState,
+    budget: Budget,
+    qid: str,
+    output_dir: Path,
+) -> bool:
     """Atualiza o estado da questão a partir das afirmações verificadas.
 
     Devolve True quando houve mudança justificada de estado (conta como progresso).
@@ -283,6 +344,8 @@ def _update_question_status(state: ResearchState, qid: str, output_dir: Path) ->
     if new_status != question.status:
         question.status = new_status
         append_event(output_dir, "question_status", {"question": qid, "status": new_status.value})
+        if new_status == Status.CONFLICTED:
+            _compare_conflict(caller, state, budget, question, output_dir)
         return True
     return False
 
@@ -340,7 +403,7 @@ def _investigate_gap(
             )
         if budget.pages_fetched >= config.max_pages:
             break
-    changed = _update_question_status(state, qid, output_dir)
+    changed = _update_question_status(caller, state, budget, qid, output_dir)
     if progress_signals:
         append_event(
             output_dir, "evidence_added", {"question": qid, "count": len(progress_signals)}
