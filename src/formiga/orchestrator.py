@@ -89,17 +89,17 @@ def run_research(
     progress(f"Saída: {output_dir}")
 
     if client is None:
-        from formiga.ollama import OllamaClient  # Etapa 3
+        from formiga.ollama import OllamaClient
 
         client = OllamaClient(config)
     if search is None:
-        from formiga.searxng import SearxngSearch  # Etapa 3
+        from formiga.searxng import SearxngSearch
 
         search = SearxngSearch(config)
     if fetcher is None:
-        from formiga.fetcher import SafeFetcher  # Etapa 3
+        from formiga.fetcher import SafeFetcher
 
-        fetcher = SafeFetcher(config)
+        fetcher = SafeFetcher(config, remaining_seconds=budget.remaining_seconds)
 
     def on_llm_call(_task: TaskType, _ok: bool) -> None:
         # Toda tentativa, inclusive falha e correção de formato, consome orçamento.

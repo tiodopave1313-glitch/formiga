@@ -75,7 +75,7 @@ def main(argv: list[str] | None = None) -> int:
             return EXIT_INVALID_INPUT
 
         try:
-            result = run_research(config, _progress=lambda m: _progress(m, config.verbose))
+            result = run_research(config, progress=lambda m: _progress(m, config.verbose))
             print(result.report_path)
             print(f"status: {result.status}")
             return EXIT_OK
