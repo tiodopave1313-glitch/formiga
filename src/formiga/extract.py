@@ -37,8 +37,15 @@ def extract_main_text(html: str) -> tuple[str, str | None]:
     extracted = trafilatura.extract(
         html, include_comments=False, include_links=False, favor_recall=True
     )
+    # Trafilatura >= 2.0 devolve `Document` (com `as_dict()`); versões antigas
+    # devolvem dict. Aceitamos os dois formatos.
     title = trafilatura.extract_metadata(html)
-    title_value = title.get("title") if title else None
+    if isinstance(title, dict):
+        title_value = title.get("title")
+    elif title is not None:
+        title_value = title.as_dict().get("title")
+    else:
+        title_value = None
     if not extracted:
         raise ValueError("extração vazia")
     return extracted, title_value

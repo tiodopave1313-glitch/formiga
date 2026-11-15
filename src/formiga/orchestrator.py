@@ -156,6 +156,8 @@ def run_research(
     _plan(caller, state, config, output_dir, progress)
     save_state(output_dir, state)
     append_event(output_dir, "planned", {"questions": len(state.questions)})
+    state.budget = budget.snapshot()
+    save_state(output_dir, state)
 
     # --- loop de investigação ------------------------------------------------
     no_progress: dict[str, int] = {}
@@ -181,6 +183,8 @@ def run_research(
             else:
                 no_progress.pop(gap.id, None)
             save_state(output_dir, state)
+            state.budget = budget.snapshot()
+            save_state(output_dir, state)
             append_event(
                 output_dir,
                 "round_ended",
@@ -192,6 +196,7 @@ def run_research(
             stop_reason = "Todas as questões estão resolvidas, bloqueadas ou esgotadas."
     except KeyboardInterrupt:
         state.stop_reason = "Interrompido pelo usuário; checkpoint desta rodada permanece salvo."
+        state.budget = budget.snapshot()
         save_state(output_dir, state)
         append_event(output_dir, "interrupted", {})
         raise

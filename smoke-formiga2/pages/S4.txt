@@ -1,0 +1,83 @@
+Blog
+Lexical search vs. semantic search in data architectures
+Compare lexical and semantic search methodologies. Learn about BM25 scoring, vector embeddings, infrastructure costs, and why hybrid search is the industry standard.
+The transition from traditional keyword matching to intent-based semantic search changes how organizations manage information retrieval. Lexical retrieval systems have served as the industry standard for decades because they’re precise for structured data and exact keyword matches by using inverted indexes.
+Conversely, semantic search uses natural language processing and vector search to interpret the contextual meaning of user queries, helping a search engine return relevant information even if the query didn’t use the exact words.
+But beyond relevance, choosing between these methodologies also determines the underlying architecture, computational cost, and how consistently and reliably the system works.
+Lexical search matches a query against an index of stored text. This could be the literal characters, or the basic units of text, usually words, that a search engine uses to index and match content, which are called tokens.
+This approach is rule-based and predictable because it uses exact words or simple variations of them within a text to decide what results to return. Enterprises usually use lexical retrieval to search structured data such as product codes, identifiers, or technical documentation where the user is looking for an exact keyword.
+First, data needs to be analyzed and undergo tokenization, where raw text is broken down into individual basic terms, followed by normalization techniques such as stemming or lemmatization.
+- Stemming reduces a word to its root form, such as converting "searching" and "searched" to the root "search,” which helps the search system match variants of a term.
+- Lemmatization reduces a word to its basest “dictionary” form, or “lemma,” analyzing vocabulary and part-of-speech, such as converting "better" to "good" or "ran" to "run." Unlike stemming, it delivers a valid word rather than a truncated root.
+This processing also includes synonym expansion, where predefined lists of related terms broaden the search query. However, this is considered an extension of token matching rather than the system understanding the context.
+Next, most lexical search implementations use the inverted index, a data structure that maps each unique token to a list of documents or records containing that token. When the search system runs a search query, it finds the corresponding lists, often called postings lists, for each word in the query and then performs intersections or unions to find matching documents. This finds results quickly even with big datasets because the system uses the precomputed index rather than scanning the whole table.
+To provide an ordered list of results, lexical systems use ranking functions to decide how well each document matches the query. The current industry standard for this task is the Best Matching 25 (BM25) algorithm, which improves upon earlier TF-IDF (Term Frequency-Inverse Document Frequency) models by giving less extra credit for repeated words and adjusting for document length so longer texts don’t dominate the results.
+| Metric component | Function in BM25 ranking | Effect on search result | 
+|---|---|---|
+| Term frequency (TF) | Measures how often a query term appears in a document | Higher frequency increases the score, but saturation prevents multiple repetitions from dominating | 
+| Inverse document frequency (IDF) | Assigns more weight to rare terms across the entire text | Common words like "the" are penalized, while rare terms like "cryptography" carry high weight | 
+| Length normalization | Adjusts the score based on document length relative to the average | Prevents longer documents from being ranked higher simply by containing more words | 
+M25 uses tunable parameters, typically k (controlling saturation) and b (controlling length normalization), to refine its behavior for specific datasets.
+Semantic search changes the search experience by interpreting the intent and semantic meaning of a query rather than merely matching an exact keyword. With natural language processing (NLP) and machine learning models, semantic search engines convert unstructured data into numeric representations called vector embeddings. These embeddings are placed into a continuous vector space with many dimensions, where items that are closer together represent more similar meanings.
+So how do you turn text to vectors? Enterprise data, such as product descriptions or technical manuals, is broken into smaller units called chunks and passed through neural models, such as Bidirectional Encoder Representations from Transformers (BERT) or Sentence Transformers. Each chunk is converted into a dense vector, typically containing 768 or 1024 dimensions, where each dimension represents one aspect of the semantic content.
+Unlike lexical search’s token intersections, semantic search finds relevant information by calculating the distance between the query vector and document vectors, using one of several methods:
+| Similarity metric | Mathematical operation | Example | 
+|---|---|---|
+| Cosine similarity | Measures the cosine of the angle between two vectors | Text analysis where both the vectors are pointing in the same way, even if one is longer than the other | 
+| Euclidean distance (L2) | Measures the straight-line distance between two points | Scenarios where the numerical values in the features are important | 
+| Inner product (Dot product) | Calculates the sum of the products of vector entries | Best suited for models that normalize vectors during training to include length as well as distance | 
+The choice of metric must align with the specific embedding model used so the search query retrieves relevant results accurately.
+Semantic search is good at handling complex queries where what the user is looking for isn’t easily described with specific keywords. For instance, a lexical system search for "budget-friendly smartphones with high-quality cameras" might not find a document that uses "affordable" instead of "budget-friendly.”
+A semantic search engine, however, recognizes the semantic similarity between these concepts through its high-dimensional representations, returning relevant information that lexical keyword matching would omit.
+While semantic search understands the user question better, it’s a bigger computational and memory load on the system than lexical retrieval. Storing dense vectors requires more RAM than the sparse inverted indexes of full-text search, which adds up when datasets grow.
+A standard 1024-dimensional embedding, stored in float32 precision, uses approximately 4 KB per vector. In a production environment with a replication factor of 3 (or 2 in the case of Aerospike) for high availability, that means 12 KB per indexed record. For 100 million vectors, that means 1.2 TB of RAM.
+That’s a lot. To reduce these costs, enterprise teams use techniques to make the vector data less precise, and so take up less space.
+Scalar quantization reduces the precision of each dimension from a 32-bit float to an 8-bit integer, reducing storage requirements to 25% while still providing almost the same retrieval quality.
+Techniques such as Matryoshka Representation Learning reduce vectors to lower dimensions, such as 128 instead of 1024, for an additional 56.6% storage reduction.
+Unlike lexical retrieval, where the index is compact and runs efficiently on standard hardware, semantic search requires high-performance multi-core processors and specialized vector stores for the similarity calculations.
+| Feature | Lexical search (Keyword) | Semantic search (Vector) | 
+|---|---|---|
+| Data to be stored | Sparse inverted index | Dense vector embedding | 
+| Hardware requirements | Standard CPU and storage I/O | High RAM and GPU | 
+| Scaling characteristic | Near-linear with document count | Exponentially increasing | 
+| Operational cost | Economical at scale | High TCO due to RAM and model processing | 
+Okay, but how well do they work? This gets tested by the Benchmarking-IR (BEIR) benchmark, which evaluates models on how well they answer medical questions, retrieve legal documents, and search code they haven’t seen before.
+But while dense semantic models are becoming more powerful, lexical BM25 still works, particularly when a semantic model has not been specifically fine-tuned.
+For high-performance systems, latency is as important as accuracy. Lexical retrieval is generally as much as ten times faster than semantic search for exact matches in small to medium datasets. However, as datasets grow, semantic search using approximate nearest neighbor (ANN) algorithms finds similar items much faster than checking every option individually, even as the dataset gets large, by narrowing the search space to a subset of candidate vectors.
+Because neither lexical nor semantic search is perfect by itself, the standard hybrid search uses both. Hybrid retrieval uses both methods, running BM25 keyword matching and vector-based semantic search in parallel to merge their results into one search result list.
+So how do you combine the two methods? Lexical scores are based on term frequency and rarity, while semantic measures are based on vector distance.
+Hybrid systems combine multiple rankings using reciprocal rank fusion (RRF). Instead of relying on raw scores, RRF focuses on a document’s position in each ranking. Higher-ranked documents get more weight, and a constant factor determines how strongly the top positions influence the final combined ranking.
+Documents appearing at the top of both lexical and semantic lists receive the highest final score, so the system captures both precise facts and what the user meant.
+For even more accurate results, organizations often use a two-stage retrieval pipeline.
+In the first stage, fast retrievers such as BM25 and ANN vector search find a candidate set of several hundred documents.
+In the second stage, a cross-encoder reranker, which uses a lot more computational resources, applies neural logic only to those top candidates to produce the final ranking. This architecture gets both sub-millisecond initial retrieval and precise results from language models.
+| Retrieval model | Average nDCG@10 score | Model type | 
+|---|---|---|
+| Traditional BM25 | 41.2% | Lexical | 
+| BGE-Large-EN | 52.3% | Dense semantic | 
+| Voyage-Large-2 | 54.8% | Dense semantic | 
+| Hybrid retrieval | 49.1% - 58.8% | Combined | 
+These results show that dense retrieval now consistently outperforms lexical search by 10-12% in average ranking accuracy (nDCG@10). However, the gap closes in specialized domains such as legal or technical documentation where exact keyword matches are important.
+Furthermore, dense models often struggle with "adversarial" queries, such as those containing negations (e.g., "smartphones without OLED"). Lexical systems are sometimes more reliable because they match the "without" or "not" tokens.
+In big environments, one user interaction rarely results in one database call. Instead, a complex search query often triggers a "fan-out" of operations, where a parent node coordinates dozens or hundreds of internal requests, such as fetching embeddings, querying multiple vector shards, and retrieving metadata.
+This becomes a problem because the overall response time is not determined by the average latency but by the "weakest link,” or the slowest operation in the chain. What that means is, if a database call has a 99th percentile (P99) latency of 1ms, a user interaction requiring 100 parallel calls has only a 36.6% chance of completing without experiencing a tail-latency delay.
+| Number of parallel sub-requests (N) | Probability of hitting a P99 outlier | 
+|---|---|
+| 1 request | 1% | 
+| 10 requests | ~9.6% | 
+| 100 requests | ~63.4% | 
+As systems grow and fan-out increases, the parent request response time converges toward the worst-case child response time. This means tail latencies need to be strictly bounded to prevent this from happening.
+Enterprise systems manage this through techniques such as hedged requests, which send a duplicate request to a secondary replica if the first takes longer than the 95th percentile, and by using architectures that reduce unpredictable stalls associated with garbage collection or non-budgeted background maintenance. Databases written in C or C++ are often preferred for these high-fan-out search workloads over managed runtimes because they offer more predictable memory management.
+Getting the right balance between the precision of lexical retrieval and the context-awareness of semantic search is important today. While lexical search provides the necessary speed and exactness for structured identifiers, semantic search provides the intuitive, intent-based interactions that users now expect. Combining them requires a high-performance, low-latency data layer that remains predictable under the volatile conditions of real-world production traffic.
+Aerospike does this by providing the predictable foundation to manage large-scale request fan-outs and volatile usage patterns. Its patented Hybrid Memory Architecture delivers near-in-memory performance at the cost of NVMe storage, so hybrid search systems produce consistent latencies without cache refreshes or gradual performance changes.
+Organizations looking to grow their search infrastructure while keeping systems running without overprovisioning should explore the predictable behavior of the Aerospike Database.
+Find answers to common questions below to help you learn more and get the most out of Aerospike.
+Semantic search finds content based on intent and meaning rather than keywords.
+Vector search is a specific technical implementation of semantic search where data is represented as mathematical vectors in a high-dimensional space.
+While semantic search also uses other techniques such as knowledge graphs, implementations rely on vector search and embeddings.
+Yes. While semantic search provides the conceptual context required for large language models, you need lexical retrieval for more precise results. But if a RAG application cannot find a specific document because the user query includes an exact product SKU or an error code the embedding model does not recognize, the resulting AI-generated answer will likely be irrelevant or incorrect. Most production RAG systems use a hybrid search model to capture both specific facts and conceptual intent.
+The primary costs are associated with RAM and high-performance processing hardware. Storing dense vectors requires more memory than inverted indexes do, and generating embeddings requires GPU resources for model inference during every query and ingest operation. Organizations often save 30-70% in query costs by using semantic caching to store and reuse embeddings for frequent queries.
+An inverted index is better when your queries depend on exact and predictable matching for IDs, codes, or specific terminology. Lexical search using inverted indexes also uses fewer resources and is easier to manage at scale.
+Use a vector store when you need to capture intent, handle natural language queries, or perform similarity-based matching across unstructured data such as images and audio.
+For a deeper understanding and more insights, explore these additional resources.
+See more

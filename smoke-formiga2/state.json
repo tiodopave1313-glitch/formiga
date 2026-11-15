@@ -1,0 +1,811 @@
+{
+  "contract": {
+    "question": "Quais são os trade-offs entre busca lexical e busca híbrida?",
+    "objective": "analisar as diferenças e implicações de custo-benefício entre busca lexical pura e busca híbrida",
+    "assumptions": [
+      "busca lexical refere-se a correspondência de padrões de texto (palavras, frases) e busca híbrida combina isso com metadados ou outras técnicas",
+      "trade-offs envolvem precisão, recall, latência e complexidade de implementação",
+      "o termo 'trade-offs' implica uma comparação de custos e benefícios, não apenas uma descrição das diferenças"
+    ],
+    "restrictions": [],
+    "sufficiency_criteria": [
+      "comparar os modelos de recuperação de informação e seus pressupostos",
+      "comparar as vantagens e desvantagens de cada abordagem",
+      "analisar como cada método afeta as métricas de avaliação"
+    ],
+    "created_at": "2026-11-15T08:56:02Z"
+  },
+  "questions": [
+    {
+      "id": "Q1",
+      "question": "Quais são as diferenças conceituais entre busca lexical e busca híbrida?",
+      "priority": "high",
+      "sufficiency": "comparar os modelos de recuperação de informação e seus pressupostos",
+      "status": "SUPPORTED",
+      "attempts": 1,
+      "evidence_ids": [
+        "E1",
+        "E2",
+        "E3",
+        "E4",
+        "E5",
+        "E6",
+        "E7",
+        "E8",
+        "E9"
+      ],
+      "limitation": null,
+      "depth": 1
+    },
+    {
+      "id": "Q2",
+      "question": "Quais são os trade-offs de custo-benefício entre busca lexical e busca híbrida?",
+      "priority": "high",
+      "sufficiency": "comparar as vantagens e desvantagens de cada abordagem",
+      "status": "SUPPORTED",
+      "attempts": 1,
+      "evidence_ids": [
+        "E10",
+        "E11",
+        "E12",
+        "E13",
+        "E14",
+        "E15",
+        "E16",
+        "E17",
+        "E18",
+        "E19",
+        "E20"
+      ],
+      "limitation": null,
+      "depth": 1
+    },
+    {
+      "id": "Q3",
+      "question": "Quais são as implicações de cada abordagem em termos de precisão, recall e latência?",
+      "priority": "medium",
+      "sufficiency": "analisar como cada método afeta as métricas de avaliação",
+      "status": "OPEN",
+      "attempts": 0,
+      "evidence_ids": [],
+      "limitation": null,
+      "depth": 1
+    }
+  ],
+  "sources": [
+    {
+      "id": "S1",
+      "requested_url": "https://www.elastic.co/what-is/hybrid-search",
+      "final_url": "https://www.elastic.co/what-is/hybrid-search",
+      "title": "What is hybrid search? How it works and when to use it",
+      "accessed_at": "2026-11-15T08:56:33Z",
+      "published_at": null,
+      "text_hash": "db707c368f5427fa",
+      "extraction_status": "SUCCESS",
+      "failure_reason": null
+    },
+    {
+      "id": "S2",
+      "requested_url": "https://www.keyvalue.systems/blog/hybrid-rag-architecture/",
+      "final_url": "https://www.keyvalue.systems/blog/hybrid-rag-architecture/",
+      "title": "Hybrid RAG: Lexical Search and Semantic Search Explained",
+      "accessed_at": "2026-11-15T09:01:35Z",
+      "published_at": null,
+      "text_hash": "7b9af087236642a5",
+      "extraction_status": "SUCCESS",
+      "failure_reason": null
+    },
+    {
+      "id": "S3",
+      "requested_url": "https://www.paradedb.com/learn/search-concepts/lexical-vs-semantic",
+      "final_url": "https://www.paradedb.com/learn/search-concepts/lexical-vs-semantic",
+      "title": "Lexical vs Semantic Search",
+      "accessed_at": "2026-11-15T09:05:09Z",
+      "published_at": null,
+      "text_hash": "e3a02b0a34f704c0",
+      "extraction_status": "SUCCESS",
+      "failure_reason": null
+    },
+    {
+      "id": "S4",
+      "requested_url": "https://aerospike.com/blog/lexical-vs-semantic-search-data-architectures/",
+      "final_url": "https://aerospike.com/blog/lexical-vs-semantic-search-data-architectures/",
+      "title": "Lexical vs. Semantic Search in Data Architectures | Aerospike",
+      "accessed_at": "2026-11-15T09:11:10Z",
+      "published_at": null,
+      "text_hash": "0af26eecab9cb002",
+      "extraction_status": "SUCCESS",
+      "failure_reason": null
+    },
+    {
+      "id": "S5",
+      "requested_url": "https://redis.io/blog/hybrid-search-explained/",
+      "final_url": "https://redis.io/blog/hybrid-search-explained/",
+      "title": "Hybrid search explained",
+      "accessed_at": "2026-11-15T09:14:31Z",
+      "published_at": null,
+      "text_hash": "b957b6ef72288b63",
+      "extraction_status": "SUCCESS",
+      "failure_reason": null
+    }
+  ],
+  "evidence": [
+    {
+      "id": "E1",
+      "source_id": "S3",
+      "quote": "Lexical methods (including full-text search) match tokens precisely. They only succeed when the query and document share vocabulary.",
+      "locator": {
+        "chunk_index": 0,
+        "char_start": 451,
+        "char_end": 583
+      },
+      "content_hash": "e3a02b0a34f704c0",
+      "question_ids": [
+        "Q1"
+      ]
+    },
+    {
+      "id": "E2",
+      "source_id": "S3",
+      "quote": "Lexical search has been part of information systems for decades.",
+      "locator": {
+        "chunk_index": 1,
+        "char_start": 1052,
+        "char_end": 1116
+      },
+      "content_hash": "e3a02b0a34f704c0",
+      "question_ids": [
+        "Q1"
+      ]
+    },
+    {
+      "id": "E3",
+      "source_id": "S3",
+      "quote": "Early workloads depended on deterministic matching.",
+      "locator": {
+        "chunk_index": 1,
+        "char_start": 1117,
+        "char_end": 1168
+      },
+      "content_hash": "e3a02b0a34f704c0",
+      "question_ids": [
+        "Q1"
+      ]
+    },
+    {
+      "id": "E4",
+      "source_id": "S3",
+      "quote": "Most queries issued by databases and other internal tools referenced exact terms like IDs or error codes.",
+      "locator": {
+        "chunk_index": 1,
+        "char_start": 1169,
+        "char_end": 1274
+      },
+      "content_hash": "e3a02b0a34f704c0",
+      "question_ids": [
+        "Q1"
+      ]
+    },
+    {
+      "id": "E5",
+      "source_id": "S3",
+      "quote": "For example, a SQL query using LIKE '%error%' searches for any text containing the substring \"error\".",
+      "locator": {
+        "chunk_index": 1,
+        "char_start": 1275,
+        "char_end": 1376
+      },
+      "content_hash": "e3a02b0a34f704c0",
+      "question_ids": [
+        "Q1"
+      ]
+    },
+    {
+      "id": "E6",
+      "source_id": "S3",
+      "quote": "Modern lexical search is much more advanced and determines relevance based on token presence and frequency.",
+      "locator": {
+        "chunk_index": 1,
+        "char_start": 1377,
+        "char_end": 1484
+      },
+      "content_hash": "e3a02b0a34f704c0",
+      "question_ids": [
+        "Q1"
+      ]
+    },
+    {
+      "id": "E7",
+      "source_id": "S3",
+      "quote": "Documents are scored higher when query terms appear more frequently or are rarer across the entire corpus.",
+      "locator": {
+        "chunk_index": 1,
+        "char_start": 1485,
+        "char_end": 1591
+      },
+      "content_hash": "e3a02b0a34f704c0",
+      "question_ids": [
+        "Q1"
+      ]
+    },
+    {
+      "id": "E8",
+      "source_id": "S3",
+      "quote": "Most lexical search implementations use inverted indexes.",
+      "locator": {
+        "chunk_index": 2,
+        "char_start": 1622,
+        "char_end": 1679
+      },
+      "content_hash": "e3a02b0a34f704c0",
+      "question_ids": [
+        "Q1"
+      ]
+    },
+    {
+      "id": "E9",
+      "source_id": "S3",
+      "quote": "Semantic methods capture intended meaning, but are poorly suited for exact identifiers (IDs, numbers, proper names) that lexical systems handle precisely.",
+      "locator": {
+        "chunk_index": 0,
+        "char_start": 586,
+        "char_end": 740
+      },
+      "content_hash": "e3a02b0a34f704c0",
+      "question_ids": [
+        "Q1"
+      ]
+    },
+    {
+      "id": "E10",
+      "source_id": "S4",
+      "quote": "Lexical search matches a query against an index of stored text.",
+      "locator": {
+        "chunk_index": 1,
+        "char_start": 943,
+        "char_end": 1006
+      },
+      "content_hash": "0af26eecab9cb002",
+      "question_ids": [
+        "Q2"
+      ]
+    },
+    {
+      "id": "E11",
+      "source_id": "S4",
+      "quote": "Enterprises usually use lexical retrieval to search structured data such as product codes, identifiers, or technical documentation where the user is looking for an exact keyword.",
+      "locator": {
+        "chunk_index": 1,
+        "char_start": 1316,
+        "char_end": 1494
+      },
+      "content_hash": "0af26eecab9cb002",
+      "question_ids": [
+        "Q2"
+      ]
+    },
+    {
+      "id": "E12",
+      "source_id": "S4",
+      "quote": "First, data needs to be analyzed and undergo tokenization, where raw text is broken down into individual basic terms, followed by normalization techniques such as stemming or lemmatization.",
+      "locator": {
+        "chunk_index": 1,
+        "char_start": 1495,
+        "char_end": 1684
+      },
+      "content_hash": "0af26eecab9cb002",
+      "question_ids": [
+        "Q2"
+      ]
+    },
+    {
+      "id": "E13",
+      "source_id": "S5",
+      "quote": "Hybrid search is a powerful addition to many apps, but it isn't always the right choice.",
+      "locator": {
+        "chunk_index": 11,
+        "char_start": 8728,
+        "char_end": 8816
+      },
+      "content_hash": "b957b6ef72288b63",
+      "question_ids": [
+        "Q2"
+      ]
+    },
+    {
+      "id": "E14",
+      "source_id": "S5",
+      "quote": "Higher resource usage: You're maintaining two indexes (full-text and vector), which means more storage and memory usage.",
+      "locator": {
+        "chunk_index": 11,
+        "char_start": 8896,
+        "char_end": 9016
+      },
+      "content_hash": "b957b6ef72288b63",
+      "question_ids": [
+        "Q2"
+      ]
+    },
+    {
+      "id": "E15",
+      "source_id": "S5",
+      "quote": "Added latency: There’s more overhead when you’re running two searches in parallel and fusing results.",
+      "locator": {
+        "chunk_index": 11,
+        "char_start": 9019,
+        "char_end": 9120
+      },
+      "content_hash": "b957b6ef72288b63",
+      "question_ids": [
+        "Q2"
+      ]
+    },
+    {
+      "id": "E16",
+      "source_id": "S5",
+      "quote": "Tuning complexity: It takes some experimenting to balance keyword and semantic results.",
+      "locator": {
+        "chunk_index": 11,
+        "char_start": 9231,
+        "char_end": 9318
+      },
+      "content_hash": "b957b6ef72288b63",
+      "question_ids": [
+        "Q2"
+      ]
+    },
+    {
+      "id": "E17",
+      "source_id": "S5",
+      "quote": "Overkill for simple use cases: If your users only search by exact product IDs or your content is highly structured, pure keyword search is often enough.",
+      "locator": {
+        "chunk_index": 12,
+        "char_start": 9470,
+        "char_end": 9622
+      },
+      "content_hash": "b957b6ef72288b63",
+      "question_ids": [
+        "Q2"
+      ]
+    },
+    {
+      "id": "E18",
+      "source_id": "S5",
+      "quote": "Similarly, if your queries are always conceptual with no exact-match requirements, vector search alone is probably simpler.",
+      "locator": {
+        "chunk_index": 12,
+        "char_start": 9623,
+        "char_end": 9746
+      },
+      "content_hash": "b957b6ef72288b63",
+      "question_ids": [
+        "Q2"
+      ]
+    },
+    {
+      "id": "E19",
+      "source_id": "S5",
+      "quote": "These trade-offs are manageable for most production apps, especially when you use infrastructure that handles both indexing methods natively.",
+      "locator": {
+        "chunk_index": 12,
+        "char_start": 9747,
+        "char_end": 9888
+      },
+      "content_hash": "b957b6ef72288b63",
+      "question_ids": [
+        "Q2"
+      ]
+    },
+    {
+      "id": "E20",
+      "source_id": "S5",
+      "quote": "The key is knowing when the relevance improvements justify the added complexity.",
+      "locator": {
+        "chunk_index": 12,
+        "char_start": 9889,
+        "char_end": 9969
+      },
+      "content_hash": "b957b6ef72288b63",
+      "question_ids": [
+        "Q2"
+      ]
+    }
+  ],
+  "claims": [
+    {
+      "id": "C1",
+      "text": "Lexical methods (including full-text search) match tokens precisely. They only succeed when the query and document share vocabulary.",
+      "type": "direct",
+      "evidence_ids": [
+        "E1"
+      ],
+      "scope_or_caveat": null,
+      "verification": {
+        "label": "DIRECT_SUPPORT",
+        "caveat": null,
+        "verified_at": "2026-11-15T09:09:25Z"
+      },
+      "question_ids": [
+        "Q1"
+      ],
+      "supported": true
+    },
+    {
+      "id": "C2",
+      "text": "Lexical search has been part of information systems for decades.",
+      "type": "direct",
+      "evidence_ids": [
+        "E2"
+      ],
+      "scope_or_caveat": null,
+      "verification": {
+        "label": "DIRECT_SUPPORT",
+        "caveat": null,
+        "verified_at": "2026-11-15T09:09:35Z"
+      },
+      "question_ids": [
+        "Q1"
+      ],
+      "supported": true
+    },
+    {
+      "id": "C3",
+      "text": "Early workloads depended on deterministic matching.",
+      "type": "direct",
+      "evidence_ids": [
+        "E3"
+      ],
+      "scope_or_caveat": null,
+      "verification": {
+        "label": "DIRECT_SUPPORT",
+        "caveat": null,
+        "verified_at": "2026-11-15T09:09:46Z"
+      },
+      "question_ids": [
+        "Q1"
+      ],
+      "supported": true
+    },
+    {
+      "id": "C4",
+      "text": "Most queries issued by databases and other internal tools referenced exact terms like IDs or error codes.",
+      "type": "direct",
+      "evidence_ids": [
+        "E4"
+      ],
+      "scope_or_caveat": null,
+      "verification": {
+        "label": "DIRECT_SUPPORT",
+        "caveat": null,
+        "verified_at": "2026-11-15T09:09:58Z"
+      },
+      "question_ids": [
+        "Q1"
+      ],
+      "supported": true
+    },
+    {
+      "id": "C5",
+      "text": "A SQL query using LIKE '%error%' searches for any text containing the substring \"error\".",
+      "type": "direct",
+      "evidence_ids": [
+        "E5"
+      ],
+      "scope_or_caveat": null,
+      "verification": {
+        "label": "DIRECT_SUPPORT",
+        "caveat": null,
+        "verified_at": "2026-11-15T09:10:09Z"
+      },
+      "question_ids": [
+        "Q1"
+      ],
+      "supported": true
+    },
+    {
+      "id": "C6",
+      "text": "Modern lexical search is much more advanced and determines relevance based on token presence and frequency.",
+      "type": "direct",
+      "evidence_ids": [
+        "E6"
+      ],
+      "scope_or_caveat": null,
+      "verification": {
+        "label": "DIRECT_SUPPORT",
+        "caveat": null,
+        "verified_at": "2026-11-15T09:10:21Z"
+      },
+      "question_ids": [
+        "Q1"
+      ],
+      "supported": true
+    },
+    {
+      "id": "C7",
+      "text": "Documents are scored higher when query terms appear more frequently or are rarer across the entire corpus.",
+      "type": "direct",
+      "evidence_ids": [
+        "E7"
+      ],
+      "scope_or_caveat": null,
+      "verification": {
+        "label": "DIRECT_SUPPORT",
+        "caveat": null,
+        "verified_at": "2026-11-15T09:10:32Z"
+      },
+      "question_ids": [
+        "Q1"
+      ],
+      "supported": true
+    },
+    {
+      "id": "C8",
+      "text": "Most lexical search implementations use inverted indexes.",
+      "type": "direct",
+      "evidence_ids": [
+        "E8"
+      ],
+      "scope_or_caveat": null,
+      "verification": {
+        "label": "DIRECT_SUPPORT",
+        "caveat": null,
+        "verified_at": "2026-11-15T09:10:43Z"
+      },
+      "question_ids": [
+        "Q1"
+      ],
+      "supported": true
+    },
+    {
+      "id": "C9",
+      "text": "Semantic methods capture intended meaning, but are poorly suited for exact identifiers (IDs, numbers, proper names) that lexical systems handle precisely.",
+      "type": "direct",
+      "evidence_ids": [
+        "E9"
+      ],
+      "scope_or_caveat": null,
+      "verification": {
+        "label": "DIRECT_SUPPORT",
+        "caveat": null,
+        "verified_at": "2026-11-15T09:10:56Z"
+      },
+      "question_ids": [
+        "Q1"
+      ],
+      "supported": true
+    },
+    {
+      "id": "C10",
+      "text": "Lexical search matches a query against an index of stored text.",
+      "type": "direct",
+      "evidence_ids": [
+        "E10"
+      ],
+      "scope_or_caveat": null,
+      "verification": {
+        "label": "DIRECT_SUPPORT",
+        "caveat": null,
+        "verified_at": "2026-11-15T09:14:14Z"
+      },
+      "question_ids": [
+        "Q2"
+      ],
+      "supported": true
+    },
+    {
+      "id": "C11",
+      "text": "Enterprises usually use lexical retrieval to search structured data such as product codes, identifiers, or technical documentation where the user is looking for an exact keyword.",
+      "type": "direct",
+      "evidence_ids": [
+        "E11"
+      ],
+      "scope_or_caveat": null,
+      "verification": {
+        "label": "DIRECT_SUPPORT",
+        "caveat": null,
+        "verified_at": "2026-11-15T09:14:22Z"
+      },
+      "question_ids": [
+        "Q2"
+      ],
+      "supported": true
+    },
+    {
+      "id": "C12",
+      "text": "First, data needs to be analyzed and undergo tokenization, where raw text is broken down into individual basic terms, followed by normalization techniques such as stemming or lemmatization.",
+      "type": "direct",
+      "evidence_ids": [
+        "E12"
+      ],
+      "scope_or_caveat": null,
+      "verification": {
+        "label": "DIRECT_SUPPORT",
+        "caveat": null,
+        "verified_at": "2026-11-15T09:14:30Z"
+      },
+      "question_ids": [
+        "Q2"
+      ],
+      "supported": true
+    },
+    {
+      "id": "C13",
+      "text": "Hybrid search is a powerful addition to many apps, but it isn't always the right choice.",
+      "type": "direct",
+      "evidence_ids": [
+        "E13"
+      ],
+      "scope_or_caveat": null,
+      "verification": {
+        "label": "DIRECT_SUPPORT",
+        "caveat": null,
+        "verified_at": "2026-11-15T09:19:28Z"
+      },
+      "question_ids": [
+        "Q2"
+      ],
+      "supported": true
+    },
+    {
+      "id": "C14",
+      "text": "Higher resource usage: You're maintaining two indexes (full-text and vector), which means more storage and memory usage.",
+      "type": "direct",
+      "evidence_ids": [
+        "E14"
+      ],
+      "scope_or_caveat": null,
+      "verification": {
+        "label": "DIRECT_SUPPORT",
+        "caveat": null,
+        "verified_at": "2026-11-15T09:19:37Z"
+      },
+      "question_ids": [
+        "Q2"
+      ],
+      "supported": true
+    },
+    {
+      "id": "C15",
+      "text": "Added latency: There’s more overhead when you’re running two searches in parallel and fusing results.",
+      "type": "direct",
+      "evidence_ids": [
+        "E15"
+      ],
+      "scope_or_caveat": null,
+      "verification": {
+        "label": "DIRECT_SUPPORT",
+        "caveat": null,
+        "verified_at": "2026-11-15T09:19:46Z"
+      },
+      "question_ids": [
+        "Q2"
+      ],
+      "supported": true
+    },
+    {
+      "id": "C16",
+      "text": "Tuning complexity: It takes some experimenting to balance keyword and semantic results.",
+      "type": "direct",
+      "evidence_ids": [
+        "E16"
+      ],
+      "scope_or_caveat": null,
+      "verification": {
+        "label": "DIRECT_SUPPORT",
+        "caveat": null,
+        "verified_at": "2026-11-15T09:19:55Z"
+      },
+      "question_ids": [
+        "Q2"
+      ],
+      "supported": true
+    },
+    {
+      "id": "C17",
+      "text": "Overkill for simple use cases: If your users only search by exact product IDs or your content is highly structured, pure keyword search is often enough.",
+      "type": "direct",
+      "evidence_ids": [
+        "E17"
+      ],
+      "scope_or_caveat": null,
+      "verification": {
+        "label": "DIRECT_SUPPORT",
+        "caveat": null,
+        "verified_at": "2026-11-15T09:20:04Z"
+      },
+      "question_ids": [
+        "Q2"
+      ],
+      "supported": true
+    },
+    {
+      "id": "C18",
+      "text": "Similarly, if your queries are always conceptual with no exact-match requirements, vector search alone is probably simpler.",
+      "type": "direct",
+      "evidence_ids": [
+        "E18"
+      ],
+      "scope_or_caveat": null,
+      "verification": {
+        "label": "DIRECT_SUPPORT",
+        "caveat": null,
+        "verified_at": "2026-11-15T09:20:13Z"
+      },
+      "question_ids": [
+        "Q2"
+      ],
+      "supported": true
+    },
+    {
+      "id": "C19",
+      "text": "The trade-offs are manageable for most production apps, especially when you use infrastructure that handles both indexing methods natively.",
+      "type": "direct",
+      "evidence_ids": [
+        "E19"
+      ],
+      "scope_or_caveat": null,
+      "verification": {
+        "label": "DIRECT_SUPPORT",
+        "caveat": null,
+        "verified_at": "2026-11-15T09:20:22Z"
+      },
+      "question_ids": [
+        "Q2"
+      ],
+      "supported": true
+    },
+    {
+      "id": "C20",
+      "text": "The key is knowing when the relevance improvements justify the added complexity.",
+      "type": "direct",
+      "evidence_ids": [
+        "E20"
+      ],
+      "scope_or_caveat": null,
+      "verification": {
+        "label": "DIRECT_SUPPORT",
+        "caveat": null,
+        "verified_at": "2026-11-15T09:20:31Z"
+      },
+      "question_ids": [
+        "Q2"
+      ],
+      "supported": true
+    }
+  ],
+  "budget": {},
+  "token_usage": {
+    "known_tokens": 3957,
+    "unknown_calls": 2
+  },
+  "status": "parcial",
+  "stop_reason": null,
+  "round_number": 2,
+  "query_history": [
+    {
+      "question_id": "Q1",
+      "query": "lexical search vs hybrid search",
+      "normalized_query": "lexical search vs hybrid search"
+    },
+    {
+      "question_id": "Q1",
+      "query": "lexical search hybrid search trade-offs",
+      "normalized_query": "lexical search hybrid search trade-offs"
+    },
+    {
+      "question_id": "Q2",
+      "query": "lexical search vs hybrid search trade-offs",
+      "normalized_query": "lexical search vs hybrid search trade-offs"
+    },
+    {
+      "question_id": "Q2",
+      "query": "lexical search vs hybrid search cost-benefit",
+      "normalized_query": "lexical search vs hybrid search cost-benefit"
+    }
+  ],
+  "operational_failures": [
+    "Extração de afirmações falhou para S1 (schema inválido ou orçamento).",
+    "Extração de afirmações falhou para S2 (schema inválido ou orçamento).",
+    "Página inacessível (https://devblogs.microsoft.com/ise/keyword-vs-hybrid-search/): HTTP 404."
+  ]
+}

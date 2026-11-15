@@ -1,5 +1,212 @@
-{"ts": "2026-11-15T08:19:19Z", "type": "run_started", "data": {"question": "Quais são os trade-offs entre busca lexical e busca híbida?"}}
-{"ts": "2026-11-15T08:20:21Z", "type": "llm_call", "data": {"task": "plan", "ok": false, "tokens": 512, "seconds": 61.08}}
-{"ts": "2026-11-15T08:21:18Z", "type": "llm_call", "data": {"task": "plan", "ok": false, "tokens": 512, "seconds": 57.67}}
-{"ts": "2026-11-15T08:21:18Z", "type": "planned", "data": {"questions": 0}}
-{"ts": "2026-11-15T08:21:19Z", "type": "run_finished", "data": {"status": "bloqueada"}}
+{"ts": "2026-11-15T08:50:27Z", "type": "run_started", "data": {"question": "Quais são os trade-offs entre busca lexical e busca híbrida?"}}
+{"ts": "2026-11-15T08:50:52Z", "type": "llm_call", "data": {"task": "extract", "ok": false, "tokens": null, "seconds": 120.11, "error": "Falha ao chamar o llama-server: timed out"}}
+{"ts": "2026-11-15T08:50:52Z", "type": "page_fetch", "data": {"url": "https://nhimg.org/faq/what-is-the-difference-between-dense-retrieval-and-hybrid-retrieval-in-a-rag-pip/"}}
+{"ts": "2026-11-15T08:52:15Z", "type": "llm_call", "data": {"task": "extract", "ok": false, "tokens": null, "seconds": 120.11, "error": "Falha ao chamar o llama-server: timed out"}}
+{"ts": "2026-11-15T08:52:16Z", "type": "page_fetch", "data": {"url": "https://dspace.sti.ufcg.edu.br/bitstream/riufcg/38259/1/MELQUISEDEQUE%20CARVALHO%20SILVA-ARTIGO-CEEI-CI%C3%8ANCIA%20DA%20COMPUTA%C3%87%C3%83O%20(2024).pdf"}}
+{"ts": "2026-11-15T08:52:16Z", "type": "page_failed", "data": {"url": "https://dspace.sti.ufcg.edu.br/bitstream/riufcg/38259/1/MELQUISEDEQUE%20CARVALHO%20SILVA-ARTIGO-CEEI-CI%C3%8ANCIA%20DA%20COMPUTA%C3%87%C3%83O%20(2024).pdf", "reason": "Tipo de conteúdo não suportado: application/pdf."}}
+{"ts": "2026-11-15T08:52:16Z", "type": "search", "data": {"question": "Q3", "query": "custo-benefício busca lexical vs híbrida"}}
+{"ts": "2026-11-15T08:52:17Z", "type": "round_ended", "data": {"round": 4, "question": "Q3", "progress": false}}
+{"ts": "2026-11-15T08:52:17Z", "type": "round_started", "data": {"round": 5, "question": "Q3"}}
+{"ts": "2026-11-15T08:52:20Z", "type": "llm_call", "data": {"task": "extract", "ok": false, "tokens": null, "seconds": 120.12, "error": "Falha ao chamar o llama-server: timed out"}}
+{"ts": "2026-11-15T08:52:20Z", "type": "search", "data": {"question": "Q1", "query": "lexical search hybrid search"}}
+{"ts": "2026-11-15T08:52:20Z", "type": "round_ended", "data": {"round": 1, "question": "Q1", "progress": false}}
+{"ts": "2026-11-15T08:52:20Z", "type": "round_started", "data": {"round": 2, "question": "Q2"}}
+{"ts": "2026-11-15T08:52:31Z", "type": "llm_call", "data": {"task": "query", "ok": true, "tokens": 41, "seconds": 13.93}}
+{"ts": "2026-11-15T08:52:31Z", "type": "llm_call", "data": {"task": "query", "ok": true, "tokens": 39, "seconds": 11.16}}
+{"ts": "2026-11-15T08:52:31Z", "type": "search", "data": {"question": "Q3", "query": "lexical search vs hybrid search trade-offs"}}
+{"ts": "2026-11-15T08:52:31Z", "type": "search", "data": {"question": "Q2", "query": "trade-offs busca lexical vs híbrida"}}
+{"ts": "2026-11-15T08:52:32Z", "type": "page_fetch", "data": {"url": "https://devblogs.microsoft.com/ise/keyword-vs-hybrid-search/"}}
+{"ts": "2026-11-15T08:52:32Z", "type": "page_fetch", "data": {"url": "https://devblogs.microsoft.com/ise/keyword-vs-hybrid-search/"}}
+{"ts": "2026-11-15T08:52:33Z", "type": "page_failed", "data": {"url": "https://devblogs.microsoft.com/ise/keyword-vs-hybrid-search/", "reason": "HTTP 404."}}
+{"ts": "2026-11-15T08:52:33Z", "type": "page_fetch", "data": {"url": "https://kentcdodds.com/blog/implementing-hybrid-semantic-lexical-search"}}
+{"ts": "2026-11-15T08:52:33Z", "type": "page_failed", "data": {"url": "https://devblogs.microsoft.com/ise/keyword-vs-hybrid-search/", "reason": "HTTP 404."}}
+{"ts": "2026-11-15T08:52:33Z", "type": "page_fetch", "data": {"url": "https://nhimg.org/faq/what-is-the-difference-between-dense-retrieval-and-hybrid-retrieval-in-a-rag-pip/"}}
+{"ts": "2026-11-15T08:52:33Z", "type": "llm_call", "data": {"task": "plan", "ok": true, "tokens": 404, "seconds": 126.54}}
+{"ts": "2026-11-15T08:52:33Z", "type": "planned", "data": {"questions": 3}}
+{"ts": "2026-11-15T08:52:33Z", "type": "round_started", "data": {"round": 1, "question": "Q1"}}
+{"ts": "2026-11-15T08:52:52Z", "type": "llm_call", "data": {"task": "extract", "ok": false, "tokens": null, "seconds": 120.11, "error": "Falha ao chamar o llama-server: timed out"}}
+{"ts": "2026-11-15T08:52:52Z", "type": "search", "data": {"question": "Q2", "query": "lexical search vs hybrid search cost-benefit"}}
+{"ts": "2026-11-15T08:52:53Z", "type": "round_ended", "data": {"round": 2, "question": "Q2", "progress": false}}
+{"ts": "2026-11-15T08:52:53Z", "type": "round_started", "data": {"round": 3, "question": "Q1"}}
+{"ts": "2026-11-15T08:53:22Z", "type": "llm_call", "data": {"task": "query", "ok": true, "tokens": 40, "seconds": 48.73}}
+{"ts": "2026-11-15T08:53:22Z", "type": "search", "data": {"question": "Q1", "query": "lexical search vs hybrid search"}}
+{"ts": "2026-11-15T08:53:23Z", "type": "page_fetch", "data": {"url": "https://www.elastic.co/what-is/hybrid-search"}}
+{"ts": "2026-11-15T08:53:23Z", "type": "llm_call", "data": {"task": "query", "ok": true, "tokens": 42, "seconds": 30.1}}
+{"ts": "2026-11-15T08:53:23Z", "type": "round_ended", "data": {"round": 3, "question": "Q1", "progress": false}}
+{"ts": "2026-11-15T08:53:23Z", "type": "round_started", "data": {"round": 4, "question": "Q2"}}
+{"ts": "2026-11-15T08:53:48Z", "type": "llm_call", "data": {"task": "query", "ok": true, "tokens": 44, "seconds": 25.02}}
+{"ts": "2026-11-15T08:53:48Z", "type": "round_ended", "data": {"round": 4, "question": "Q2", "progress": false}}
+{"ts": "2026-11-15T08:53:48Z", "type": "round_started", "data": {"round": 5, "question": "Q3"}}
+{"ts": "2026-11-15T08:54:00Z", "type": "llm_call", "data": {"task": "query", "ok": true, "tokens": 45, "seconds": 11.45}}
+{"ts": "2026-11-15T08:54:00Z", "type": "search", "data": {"question": "Q3", "query": "trade-offs busca lexical vs híbrida"}}
+{"ts": "2026-11-15T08:54:00Z", "type": "page_fetch", "data": {"url": "https://arxiv.org/html/2508.01405v2"}}
+{"ts": "2026-11-15T08:54:33Z", "type": "llm_call", "data": {"task": "extract", "ok": false, "tokens": null, "seconds": 120.11, "error": "Falha ao chamar o llama-server: timed out"}}
+{"ts": "2026-11-15T08:54:33Z", "type": "page_fetch", "data": {"url": "https://redis.io/blog/hybrid-search-explained/"}}
+{"ts": "2026-11-15T08:54:34Z", "type": "llm_call", "data": {"task": "extract", "ok": false, "tokens": null, "seconds": 120.11, "error": "Falha ao chamar o llama-server: timed out"}}
+{"ts": "2026-11-15T08:54:34Z", "type": "page_fetch", "data": {"url": "https://blogs.oracle.com/developers/hybrid-retrieval-for-agent-memory-vector-lexical-and-metadata-together"}}
+{"ts": "2026-11-15T08:56:04Z", "type": "llm_call", "data": {"task": "extract", "ok": false, "tokens": null, "seconds": 120.11, "error": "Falha ao chamar o llama-server: timed out"}}
+{"ts": "2026-11-15T08:56:04Z", "type": "page_fetch", "data": {"url": "https://dl.acm.org/doi/10.14778/3811243.3811246"}}
+{"ts": "2026-11-15T08:56:04Z", "type": "page_failed", "data": {"url": "https://dl.acm.org/doi/10.14778/3811243.3811246", "reason": "HTTP 403."}}
+{"ts": "2026-11-15T08:56:04Z", "type": "page_fetch", "data": {"url": "https://www.truefoundry.com/glossary/hybrid-search"}}
+{"ts": "2026-11-15T08:56:34Z", "type": "llm_call", "data": {"task": "extract", "ok": false, "tokens": null, "seconds": 120.11, "error": "Falha ao chamar o llama-server: timed out"}}
+{"ts": "2026-11-15T08:56:34Z", "type": "search", "data": {"question": "Q2", "query": "busca lexical vs híbrida"}}
+{"ts": "2026-11-15T08:56:34Z", "type": "round_ended", "data": {"round": 2, "question": "Q2", "progress": false}}
+{"ts": "2026-11-15T08:56:34Z", "type": "round_started", "data": {"round": 3, "question": "Q1"}}
+{"ts": "2026-11-15T08:56:35Z", "type": "llm_call", "data": {"task": "extract", "ok": false, "tokens": null, "seconds": 120.11, "error": "Falha ao chamar o llama-server: timed out"}}
+{"ts": "2026-11-15T08:56:35Z", "type": "search", "data": {"question": "Q3", "query": "hybrid search cost-benefit analysis"}}
+{"ts": "2026-11-15T08:56:36Z", "type": "round_ended", "data": {"round": 5, "question": "Q3", "progress": false}}
+{"ts": "2026-11-15T08:57:13Z", "type": "llm_call", "data": {"task": "query", "ok": true, "tokens": 40, "seconds": 38.8}}
+{"ts": "2026-11-15T08:57:13Z", "type": "search", "data": {"question": "Q1", "query": "lexical search vs hybrid search trade-offs"}}
+{"ts": "2026-11-15T08:57:14Z", "type": "page_fetch", "data": {"url": "https://devblogs.microsoft.com/ise/keyword-vs-hybrid-search/"}}
+{"ts": "2026-11-15T08:57:15Z", "type": "page_failed", "data": {"url": "https://devblogs.microsoft.com/ise/keyword-vs-hybrid-search/", "reason": "HTTP 404."}}
+{"ts": "2026-11-15T08:57:15Z", "type": "page_fetch", "data": {"url": "https://aerospike.com/blog/lexical-vs-semantic-search-data-architectures/"}}
+{"ts": "2026-11-15T08:58:05Z", "type": "llm_call", "data": {"task": "extract", "ok": false, "tokens": null, "seconds": 120.11, "error": "Falha ao chamar o llama-server: timed out"}}
+{"ts": "2026-11-15T08:58:05Z", "type": "search", "data": {"question": "Q3", "query": "implicações busca lexical vs híbrida recuperação de documentos"}}
+{"ts": "2026-11-15T08:58:05Z", "type": "round_ended", "data": {"round": 5, "question": "Q3", "progress": false}}
+{"ts": "2026-11-15T08:58:05Z", "type": "round_started", "data": {"round": 6, "question": "Q3"}}
+{"ts": "2026-11-15T08:58:16Z", "type": "llm_call", "data": {"task": "extract", "ok": true, "tokens": 857, "seconds": 293.23}}
+{"ts": "2026-11-15T08:58:16Z", "type": "claim_registered", "data": {"claim": "C1", "evidence": ["E1"]}}
+{"ts": "2026-11-15T08:58:16Z", "type": "claim_registered", "data": {"claim": "C2", "evidence": ["E2"]}}
+{"ts": "2026-11-15T08:58:17Z", "type": "claim_registered", "data": {"claim": "C3", "evidence": ["E3"]}}
+{"ts": "2026-11-15T08:58:17Z", "type": "claim_registered", "data": {"claim": "C4", "evidence": ["E4"]}}
+{"ts": "2026-11-15T08:58:17Z", "type": "claim_registered", "data": {"claim": "C5", "evidence": ["E5"]}}
+{"ts": "2026-11-15T08:58:17Z", "type": "claim_registered", "data": {"claim": "C6", "evidence": ["E6"]}}
+{"ts": "2026-11-15T08:58:36Z", "type": "llm_call", "data": {"task": "synthesize", "ok": false, "tokens": null, "seconds": 120.11, "error": "Falha ao chamar o llama-server: timed out"}}
+{"ts": "2026-11-15T08:58:36Z", "type": "run_finished", "data": {"status": "parcial"}}
+{"ts": "2026-11-15T08:58:49Z", "type": "llm_call", "data": {"task": "query", "ok": true, "tokens": 43, "seconds": 43.55}}
+{"ts": "2026-11-15T08:58:49Z", "type": "search", "data": {"question": "Q3", "query": "lexical search vs hybrid search trade-offs"}}
+{"ts": "2026-11-15T08:58:49Z", "type": "page_fetch", "data": {"url": "https://devblogs.microsoft.com/ise/keyword-vs-hybrid-search/"}}
+{"ts": "2026-11-15T08:58:50Z", "type": "page_failed", "data": {"url": "https://devblogs.microsoft.com/ise/keyword-vs-hybrid-search/", "reason": "HTTP 404."}}
+{"ts": "2026-11-15T08:58:50Z", "type": "page_fetch", "data": {"url": "https://blogs.oracle.com/developers/hybrid-retrieval-for-agent-memory-vector-lexical-and-metadata-together"}}
+{"ts": "2026-11-15T08:58:58Z", "type": "llm_call", "data": {"task": "verify", "ok": true, "tokens": 26, "seconds": 41.8}}
+{"ts": "2026-11-15T08:58:59Z", "type": "claim_verified", "data": {"claim": "C1", "label": "DIRECT_SUPPORT"}}
+{"ts": "2026-11-15T08:59:15Z", "type": "llm_call", "data": {"task": "extract", "ok": false, "tokens": null, "seconds": 120.12, "error": "Falha ao chamar o llama-server: timed out"}}
+{"ts": "2026-11-15T08:59:15Z", "type": "page_fetch", "data": {"url": "https://unstructured.io/insights/the-developers-guide-to-hybrid-search-implementation"}}
+{"ts": "2026-11-15T08:59:28Z", "type": "llm_call", "data": {"task": "verify", "ok": true, "tokens": 26, "seconds": 29.52}}
+{"ts": "2026-11-15T08:59:28Z", "type": "claim_verified", "data": {"claim": "C2", "label": "DIRECT_SUPPORT"}}
+{"ts": "2026-11-15T08:59:57Z", "type": "llm_call", "data": {"task": "verify", "ok": true, "tokens": 26, "seconds": 28.54}}
+{"ts": "2026-11-15T08:59:57Z", "type": "claim_verified", "data": {"claim": "C3", "label": "DIRECT_SUPPORT"}}
+{"ts": "2026-11-15T09:00:07Z", "type": "llm_call", "data": {"task": "verify", "ok": true, "tokens": 26, "seconds": 9.9}}
+{"ts": "2026-11-15T09:00:07Z", "type": "claim_verified", "data": {"claim": "C4", "label": "DIRECT_SUPPORT"}}
+{"ts": "2026-11-15T09:00:21Z", "type": "llm_call", "data": {"task": "verify", "ok": true, "tokens": 51, "seconds": 14.13}}
+{"ts": "2026-11-15T09:00:21Z", "type": "claim_verified", "data": {"claim": "C5", "label": "PARTIAL_SUPPORT"}}
+{"ts": "2026-11-15T09:00:50Z", "type": "llm_call", "data": {"task": "extract", "ok": false, "tokens": null, "seconds": 120.11, "error": "Falha ao chamar o llama-server: timed out"}}
+{"ts": "2026-11-15T09:00:51Z", "type": "page_fetch", "data": {"url": "https://redis.io/blog/hybrid-search-explained/"}}
+{"ts": "2026-11-15T09:01:01Z", "type": "llm_call", "data": {"task": "verify", "ok": true, "tokens": 26, "seconds": 39.83}}
+{"ts": "2026-11-15T09:01:01Z", "type": "claim_verified", "data": {"claim": "C6", "label": "DIRECT_SUPPORT"}}
+{"ts": "2026-11-15T09:01:01Z", "type": "page_fetch", "data": {"url": "https://www.keyvalue.systems/blog/hybrid-rag-architecture/"}}
+{"ts": "2026-11-15T09:01:16Z", "type": "llm_call", "data": {"task": "extract", "ok": false, "tokens": null, "seconds": 120.11, "error": "Falha ao chamar o llama-server: timed out"}}
+{"ts": "2026-11-15T09:01:16Z", "type": "round_ended", "data": {"round": 3, "question": "Q1", "progress": false}}
+{"ts": "2026-11-15T09:01:16Z", "type": "round_started", "data": {"round": 4, "question": "Q2"}}
+{"ts": "2026-11-15T09:01:47Z", "type": "llm_call", "data": {"task": "query", "ok": true, "tokens": 45, "seconds": 30.77}}
+{"ts": "2026-11-15T09:01:47Z", "type": "search", "data": {"question": "Q2", "query": "lexical search vs hybrid search trade-offs"}}
+{"ts": "2026-11-15T09:01:48Z", "type": "page_fetch", "data": {"url": "https://devblogs.microsoft.com/ise/keyword-vs-hybrid-search/"}}
+{"ts": "2026-11-15T09:01:49Z", "type": "page_failed", "data": {"url": "https://devblogs.microsoft.com/ise/keyword-vs-hybrid-search/", "reason": "HTTP 404."}}
+{"ts": "2026-11-15T09:01:49Z", "type": "page_fetch", "data": {"url": "https://www.elastic.co/what-is/hybrid-search"}}
+{"ts": "2026-11-15T09:02:51Z", "type": "llm_call", "data": {"task": "extract", "ok": false, "tokens": null, "seconds": 120.11, "error": "Falha ao chamar o llama-server: timed out"}}
+{"ts": "2026-11-15T09:02:51Z", "type": "search", "data": {"question": "Q3", "query": "hybrid search vs lexical search document retrieval implications"}}
+{"ts": "2026-11-15T09:02:52Z", "type": "round_ended", "data": {"round": 6, "question": "Q3", "progress": false}}
+{"ts": "2026-11-15T09:02:52Z", "type": "run_finished", "data": {"status": "bloqueada"}}
+{"ts": "2026-11-15T09:03:50Z", "type": "llm_call", "data": {"task": "extract", "ok": false, "tokens": null, "seconds": 120.11, "error": "Falha ao chamar o llama-server: timed out"}}
+{"ts": "2026-11-15T09:03:50Z", "type": "page_fetch", "data": {"url": "https://www.alibabacloud.com/blog/the-complete-guide-to-hybrid-search-the-perfect-blend-of-full-text-and-vector-search_602921"}}
+{"ts": "2026-11-15T09:05:09Z", "type": "llm_call", "data": {"task": "extract", "ok": false, "tokens": null, "seconds": 77.09, "error": "Falha ao chamar o llama-server: Server error '500 Internal Server Error' for url 'http://127.0.0.1:9931/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500"}}
+{"ts": "2026-11-15T09:05:09Z", "type": "llm_call", "data": {"task": "extract", "ok": false, "tokens": null, "seconds": 246.07, "error": "Falha ao chamar o llama-server: Server error '500 Internal Server Error' for url 'http://127.0.0.1:9931/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500"}}
+{"ts": "2026-11-15T09:05:09Z", "type": "page_fetch", "data": {"url": "https://www.paradedb.com/learn/search-concepts/lexical-vs-semantic"}}
+{"ts": "2026-11-15T09:05:09Z", "type": "search", "data": {"question": "Q2", "query": "lexical search vs hybrid search specific trade-offs"}}
+{"ts": "2026-11-15T09:05:10Z", "type": "round_ended", "data": {"round": 4, "question": "Q2", "progress": false}}
+{"ts": "2026-11-15T09:05:10Z", "type": "round_started", "data": {"round": 5, "question": "Q3"}}
+{"ts": "2026-11-15T09:05:57Z", "type": "llm_call", "data": {"task": "query", "ok": true, "tokens": 42, "seconds": 47.25}}
+{"ts": "2026-11-15T09:05:57Z", "type": "search", "data": {"question": "Q3", "query": "trade-offs busca lexical vs híbrida"}}
+{"ts": "2026-11-15T09:05:57Z", "type": "page_fetch", "data": {"url": "https://devblogs.microsoft.com/ise/keyword-vs-hybrid-search/"}}
+{"ts": "2026-11-15T09:05:58Z", "type": "page_failed", "data": {"url": "https://devblogs.microsoft.com/ise/keyword-vs-hybrid-search/", "reason": "HTTP 404."}}
+{"ts": "2026-11-15T09:05:58Z", "type": "page_fetch", "data": {"url": "https://dspace.sti.ufcg.edu.br/bitstream/riufcg/38259/1/MELQUISEDEQUE%20CARVALHO%20SILVA-ARTIGO-CEEI-CI%C3%8ANCIA%20DA%20COMPUTA%C3%87%C3%83O%20(2024).pdf"}}
+{"ts": "2026-11-15T09:06:00Z", "type": "page_failed", "data": {"url": "https://dspace.sti.ufcg.edu.br/bitstream/riufcg/38259/1/MELQUISEDEQUE%20CARVALHO%20SILVA-ARTIGO-CEEI-CI%C3%8ANCIA%20DA%20COMPUTA%C3%87%C3%83O%20(2024).pdf", "reason": "Tipo de conteúdo não suportado: application/pdf."}}
+{"ts": "2026-11-15T09:06:00Z", "type": "page_fetch", "data": {"url": "https://www.linkedin.com/posts/alok-sharan_enterprise-search-breaks-down-when-every-activity-7486390287100047360-AV10"}}
+{"ts": "2026-11-15T09:08:01Z", "type": "llm_call", "data": {"task": "extract", "ok": false, "tokens": null, "seconds": 120.11, "error": "Falha ao chamar o llama-server: timed out"}}
+{"ts": "2026-11-15T09:08:01Z", "type": "search", "data": {"question": "Q3", "query": "implicações busca lexical vs híbrida"}}
+{"ts": "2026-11-15T09:08:02Z", "type": "round_ended", "data": {"round": 5, "question": "Q3", "progress": false}}
+{"ts": "2026-11-15T09:08:02Z", "type": "round_started", "data": {"round": 6, "question": "Q3"}}
+{"ts": "2026-11-15T09:08:14Z", "type": "llm_call", "data": {"task": "query", "ok": true, "tokens": 42, "seconds": 11.25}}
+{"ts": "2026-11-15T09:08:14Z", "type": "round_ended", "data": {"round": 6, "question": "Q3", "progress": false}}
+{"ts": "2026-11-15T09:08:14Z", "type": "run_finished", "data": {"status": "bloqueada"}}
+{"ts": "2026-11-15T09:09:12Z", "type": "llm_call", "data": {"task": "extract", "ok": true, "tokens": 996, "seconds": 243.4}}
+{"ts": "2026-11-15T09:09:12Z", "type": "claim_registered", "data": {"claim": "C7", "evidence": ["E7"]}}
+{"ts": "2026-11-15T09:09:13Z", "type": "claim_registered", "data": {"claim": "C8", "evidence": ["E8"]}}
+{"ts": "2026-11-15T09:09:13Z", "type": "claim_registered", "data": {"claim": "C9", "evidence": ["E9"]}}
+{"ts": "2026-11-15T09:09:13Z", "type": "claim_registered", "data": {"claim": "C10", "evidence": ["E10"]}}
+{"ts": "2026-11-15T09:09:13Z", "type": "claim_registered", "data": {"claim": "C11", "evidence": ["E11"]}}
+{"ts": "2026-11-15T09:09:13Z", "type": "claim_registered", "data": {"claim": "C12", "evidence": ["E12"]}}
+{"ts": "2026-11-15T09:09:13Z", "type": "claim_registered", "data": {"claim": "C13", "evidence": ["E13"]}}
+{"ts": "2026-11-15T09:09:13Z", "type": "claim_registered", "data": {"claim": "C14", "evidence": ["E14"]}}
+{"ts": "2026-11-15T09:09:13Z", "type": "claim_registered", "data": {"claim": "C15", "evidence": ["E15"]}}
+{"ts": "2026-11-15T09:09:25Z", "type": "llm_call", "data": {"task": "verify", "ok": true, "tokens": 26, "seconds": 11.63}}
+{"ts": "2026-11-15T09:09:25Z", "type": "claim_verified", "data": {"claim": "C7", "label": "DIRECT_SUPPORT"}}
+{"ts": "2026-11-15T09:09:36Z", "type": "llm_call", "data": {"task": "verify", "ok": true, "tokens": 26, "seconds": 11.06}}
+{"ts": "2026-11-15T09:09:36Z", "type": "claim_verified", "data": {"claim": "C8", "label": "DIRECT_SUPPORT"}}
+{"ts": "2026-11-15T09:09:46Z", "type": "llm_call", "data": {"task": "verify", "ok": true, "tokens": 26, "seconds": 10.56}}
+{"ts": "2026-11-15T09:09:46Z", "type": "claim_verified", "data": {"claim": "C9", "label": "DIRECT_SUPPORT"}}
+{"ts": "2026-11-15T09:09:58Z", "type": "llm_call", "data": {"task": "verify", "ok": true, "tokens": 26, "seconds": 11.55}}
+{"ts": "2026-11-15T09:09:58Z", "type": "claim_verified", "data": {"claim": "C10", "label": "DIRECT_SUPPORT"}}
+{"ts": "2026-11-15T09:10:10Z", "type": "llm_call", "data": {"task": "verify", "ok": true, "tokens": 26, "seconds": 11.5}}
+{"ts": "2026-11-15T09:10:10Z", "type": "claim_verified", "data": {"claim": "C11", "label": "DIRECT_SUPPORT"}}
+{"ts": "2026-11-15T09:10:21Z", "type": "llm_call", "data": {"task": "verify", "ok": true, "tokens": 26, "seconds": 11.39}}
+{"ts": "2026-11-15T09:10:21Z", "type": "claim_verified", "data": {"claim": "C12", "label": "DIRECT_SUPPORT"}}
+{"ts": "2026-11-15T09:10:33Z", "type": "llm_call", "data": {"task": "verify", "ok": true, "tokens": 26, "seconds": 11.46}}
+{"ts": "2026-11-15T09:10:33Z", "type": "claim_verified", "data": {"claim": "C13", "label": "DIRECT_SUPPORT"}}
+{"ts": "2026-11-15T09:10:44Z", "type": "llm_call", "data": {"task": "verify", "ok": true, "tokens": 26, "seconds": 10.93}}
+{"ts": "2026-11-15T09:10:44Z", "type": "claim_verified", "data": {"claim": "C14", "label": "DIRECT_SUPPORT"}}
+{"ts": "2026-11-15T09:10:56Z", "type": "llm_call", "data": {"task": "verify", "ok": true, "tokens": 26, "seconds": 12.38}}
+{"ts": "2026-11-15T09:10:56Z", "type": "claim_verified", "data": {"claim": "C15", "label": "DIRECT_SUPPORT"}}
+{"ts": "2026-11-15T09:10:56Z", "type": "search", "data": {"question": "Q1", "query": "lexical search hybrid search trade-offs"}}
+{"ts": "2026-11-15T09:10:56Z", "type": "question_status", "data": {"question": "Q1", "status": "SUPPORTED"}}
+{"ts": "2026-11-15T09:10:56Z", "type": "evidence_added", "data": {"question": "Q1", "count": 30}}
+{"ts": "2026-11-15T09:10:56Z", "type": "round_ended", "data": {"round": 1, "question": "Q1", "progress": true}}
+{"ts": "2026-11-15T09:10:57Z", "type": "round_started", "data": {"round": 2, "question": "Q2"}}
+{"ts": "2026-11-15T09:11:08Z", "type": "llm_call", "data": {"task": "query", "ok": true, "tokens": 42, "seconds": 11.28}}
+{"ts": "2026-11-15T09:11:08Z", "type": "search", "data": {"question": "Q2", "query": "lexical search vs hybrid search trade-offs"}}
+{"ts": "2026-11-15T09:11:08Z", "type": "page_fetch", "data": {"url": "https://devblogs.microsoft.com/ise/keyword-vs-hybrid-search/"}}
+{"ts": "2026-11-15T09:11:10Z", "type": "page_failed", "data": {"url": "https://devblogs.microsoft.com/ise/keyword-vs-hybrid-search/", "reason": "HTTP 404."}}
+{"ts": "2026-11-15T09:11:10Z", "type": "page_fetch", "data": {"url": "https://aerospike.com/blog/lexical-vs-semantic-search-data-architectures/"}}
+{"ts": "2026-11-15T09:14:54Z", "type": "llm_call", "data": {"task": "extract", "ok": true, "tokens": 1028, "seconds": 224.44}}
+{"ts": "2026-11-15T09:14:54Z", "type": "claim_registered", "data": {"claim": "C16", "evidence": ["E16"]}}
+{"ts": "2026-11-15T09:14:54Z", "type": "claim_registered", "data": {"claim": "C17", "evidence": ["E17"]}}
+{"ts": "2026-11-15T09:14:54Z", "type": "claim_registered", "data": {"claim": "C18", "evidence": ["E18"]}}
+{"ts": "2026-11-15T09:14:54Z", "type": "claim_registered", "data": {"claim": "C19", "evidence": ["E19"]}}
+{"ts": "2026-11-15T09:14:55Z", "type": "claim_registered", "data": {"claim": "C20", "evidence": ["E20"]}}
+{"ts": "2026-11-15T09:14:55Z", "type": "claim_registered", "data": {"claim": "C21", "evidence": ["E21"]}}
+{"ts": "2026-11-15T09:14:55Z", "type": "claim_registered", "data": {"claim": "C22", "evidence": ["E22"]}}
+{"ts": "2026-11-15T09:14:55Z", "type": "claim_registered", "data": {"claim": "C23", "evidence": ["E23"]}}
+{"ts": "2026-11-15T09:15:01Z", "type": "llm_call", "data": {"task": "verify", "ok": true, "tokens": 26, "seconds": 6.61}}
+{"ts": "2026-11-15T09:15:01Z", "type": "claim_verified", "data": {"claim": "C16", "label": "DIRECT_SUPPORT"}}
+{"ts": "2026-11-15T09:15:09Z", "type": "llm_call", "data": {"task": "verify", "ok": true, "tokens": 26, "seconds": 7.62}}
+{"ts": "2026-11-15T09:15:09Z", "type": "claim_verified", "data": {"claim": "C17", "label": "DIRECT_SUPPORT"}}
+{"ts": "2026-11-15T09:15:17Z", "type": "llm_call", "data": {"task": "verify", "ok": true, "tokens": 26, "seconds": 7.54}}
+{"ts": "2026-11-15T09:15:17Z", "type": "claim_verified", "data": {"claim": "C18", "label": "DIRECT_SUPPORT"}}
+{"ts": "2026-11-15T09:15:25Z", "type": "llm_call", "data": {"task": "verify", "ok": true, "tokens": 26, "seconds": 8.19}}
+{"ts": "2026-11-15T09:15:25Z", "type": "claim_verified", "data": {"claim": "C19", "label": "DIRECT_SUPPORT"}}
+{"ts": "2026-11-15T09:15:32Z", "type": "llm_call", "data": {"task": "verify", "ok": true, "tokens": 26, "seconds": 6.88}}
+{"ts": "2026-11-15T09:15:32Z", "type": "claim_verified", "data": {"claim": "C20", "label": "DIRECT_SUPPORT"}}
+{"ts": "2026-11-15T09:15:39Z", "type": "llm_call", "data": {"task": "verify", "ok": true, "tokens": 26, "seconds": 6.99}}
+{"ts": "2026-11-15T09:15:39Z", "type": "claim_verified", "data": {"claim": "C21", "label": "DIRECT_SUPPORT"}}
+{"ts": "2026-11-15T09:15:48Z", "type": "llm_call", "data": {"task": "verify", "ok": true, "tokens": 26, "seconds": 8.53}}
+{"ts": "2026-11-15T09:15:48Z", "type": "claim_verified", "data": {"claim": "C22", "label": "DIRECT_SUPPORT"}}
+{"ts": "2026-11-15T09:15:57Z", "type": "llm_call", "data": {"task": "verify", "ok": true, "tokens": 26, "seconds": 9.08}}
+{"ts": "2026-11-15T09:15:57Z", "type": "claim_verified", "data": {"claim": "C23", "label": "DIRECT_SUPPORT"}}
+{"ts": "2026-11-15T09:15:57Z", "type": "page_fetch", "data": {"url": "https://unstructured.io/insights/the-developers-guide-to-hybrid-search-implementation"}}
+{"ts": "2026-11-15T09:17:57Z", "type": "llm_call", "data": {"task": "extract", "ok": true, "tokens": 530, "seconds": 119.69}}
+{"ts": "2026-11-15T09:17:57Z", "type": "claim_registered", "data": {"claim": "C24", "evidence": ["E24"]}}
+{"ts": "2026-11-15T09:17:58Z", "type": "claim_registered", "data": {"claim": "C25", "evidence": ["E25"]}}
+{"ts": "2026-11-15T09:17:58Z", "type": "claim_registered", "data": {"claim": "C26", "evidence": ["E26"]}}
+{"ts": "2026-11-15T09:17:58Z", "type": "claim_registered", "data": {"claim": "C27", "evidence": ["E27"]}}
+{"ts": "2026-11-15T09:17:58Z", "type": "claim_registered", "data": {"claim": "C28", "evidence": ["E28"]}}
+{"ts": "2026-11-15T09:18:06Z", "type": "llm_call", "data": {"task": "verify", "ok": true, "tokens": 26, "seconds": 8.75}}
+{"ts": "2026-11-15T09:18:06Z", "type": "claim_verified", "data": {"claim": "C24", "label": "DIRECT_SUPPORT"}}
+{"ts": "2026-11-15T09:18:06Z", "type": "search", "data": {"question": "Q2", "query": "lexical search hybrid search cost benefit"}}
+{"ts": "2026-11-15T09:18:07Z", "type": "question_status", "data": {"question": "Q2", "status": "SUPPORTED"}}
+{"ts": "2026-11-15T09:18:07Z", "type": "evidence_added", "data": {"question": "Q2", "count": 22}}
+{"ts": "2026-11-15T09:18:07Z", "type": "round_ended", "data": {"round": 2, "question": "Q2", "progress": true}}
+{"ts": "2026-11-15T09:18:07Z", "type": "round_started", "data": {"round": 3, "question": "Q3"}}
+{"ts": "2026-11-15T09:18:07Z", "type": "round_ended", "data": {"round": 3, "question": "Q3", "progress": false}}
+{"ts": "2026-11-15T09:18:07Z", "type": "round_started", "data": {"round": 4, "question": "Q3"}}
+{"ts": "2026-11-15T09:18:07Z", "type": "round_ended", "data": {"round": 4, "question": "Q3", "progress": false}}
+{"ts": "2026-11-15T09:22:00Z", "type": "llm_call", "data": {"task": "synthesize", "ok": false, "tokens": 900, "seconds": 232.91, "error": "JSON inválido: Unterminated string starting at: line 2 column 22 (char 23)", "raw": "{\n  \"answer_markdown\": \"# Resposta\\n\\nA busca híbrida é uma técnica de recuperação que combina duas ou mais abordagens de busca — por exemplo, busca lexical e busca semântica — em uma única lista ranqueada para melhorar a relevância e a recuperação de resultados.\\n\\n## Como funciona\\n\\nA busca híbri", "truncated": true, "max_tokens": 900}}

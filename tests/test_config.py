@@ -25,7 +25,7 @@ class TestDefaults:
         assert config.max_searches == 12
         assert config.max_pages == 18
         assert config.pages_per_round == 3
-        assert config.chunks_per_call == 3
+        assert config.chunks_per_call == 2
         assert config.max_llm_calls == 40
         assert config.reserved_llm_calls == 8
         assert config.timeout_seconds == 900

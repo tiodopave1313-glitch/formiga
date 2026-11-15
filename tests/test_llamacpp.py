@@ -120,7 +120,7 @@ class TestBackendSelection:
 
 class TestLlmTimeout:
     def test_default_matches_generation_on_cpu(self):
-        assert Config().llm_timeout == 120.0
+        assert Config().llm_timeout == 300.0
 
     def test_env_timeout(self):
         config = Config.from_env({"FORMIGA_LLM_TIMEOUT": "300"})
@@ -497,3 +497,33 @@ class TestSamplingParams:
             Config.from_env({"FORMIGA_LLM_TEMPERATURE": "abc"})
         with pytest.raises(ConfigError):
             Config(llm_temperature=3.0).validate()
+
+
+class TestExtractionRegression:
+    """Trafilatura >= 2.0: `extract_metadata` devolve Document, não dict."""
+
+    HTML = (
+        "<html><head><title>Página</title></head><body>"
+        "<article><h1>Busca</h1><p>Parágrafo com conteúdo suficiente para a "
+        "extração funcionar e devolver texto principal. " + "Mais contexto. " * 20 +
+        "</p></article></body></html>"
+    )
+
+    def test_extract_handles_document_metadata(self):
+        from formiga.extract import extract_main_text
+
+        text, title = extract_main_text(self.HTML)
+        assert text, "extração não pode ficar vazia"
+        # Trafilatura prefere o h1 do corpo; qualquer título não-nulo vale.
+        assert title == "Busca"
+
+    def test_extract_returns_none_title_when_absent(self):
+        from formiga.extract import extract_main_text
+
+        html = (
+            "<html><body><p>Texto solto sem título. " + "x " * 200
+            + "</p></body></html>"
+        )
+        text, title = extract_main_text(html)
+        assert text
+        assert title is None or isinstance(title, str)

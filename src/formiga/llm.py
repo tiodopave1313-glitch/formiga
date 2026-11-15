@@ -32,9 +32,9 @@ class TaskType(enum.StrEnum):
 # Limites de geração por tarefa: travam loops de JSON e mantêm cada chamada
 # dentro do timeout em geração lenta (CPU). Síntese é a saída mais longa.
 TASK_MAX_TOKENS: dict[TaskType, int] = {
-    TaskType.PLAN: 1024,  # planejamento é o JSON mais verboso; 512 truncava
+    TaskType.PLAN: 1024,   # planejamento é o JSON mais verboso
     TaskType.QUERY: 128,
-    TaskType.EXTRACT: 512,
+    TaskType.EXTRACT: 1536,  # extração gera muitos claims; 512/1024 truncavam
     TaskType.VERIFY: 128,
     TaskType.COMPARE: 160,
     TaskType.SYNTHESIZE: 900,

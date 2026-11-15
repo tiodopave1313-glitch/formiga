@@ -1,0 +1,77 @@
+{
+  "contract": {
+    "question": "Quais são os trade-offs entre busca lexical e busca híbrida?",
+    "objective": "analisar as diferenças e implicações de custo-benefício entre busca lexical e busca híbrida.",
+    "assumptions": [
+      "busca lexical refere-se a busca por correspondência de palavras-chave e busca híbrida envolve técnicas de ranqueamento e combinação de buscas.",
+      "trade-offs são avaliados em termos de precisão, recall, latência e complexidade computacional.",
+      "o foco é em sistemas de busca, não em recuperação de informação em geral."
+    ],
+    "restrictions": [],
+    "sufficiency_criteria": [
+      "comparação direta entre as duas abordagens",
+      "detalhamento dos trade-offs em termos de precisão, recall, latência e complexidade",
+      "implicações para a recuperação de documentos relevantes"
+    ],
+    "created_at": "2026-11-15T09:17:05Z"
+  },
+  "questions": [
+    {
+      "id": "Q1",
+      "question": "Quais são as diferenças conceituais entre busca lexical e busca híbrida?",
+      "priority": "high",
+      "sufficiency": "o material aborda a distinção entre as duas abordagens e seus componentes.",
+      "status": "OPEN",
+      "attempts": 0,
+      "evidence_ids": [],
+      "limitation": null,
+      "depth": 1
+    },
+    {
+      "id": "Q2",
+      "question": "Quais são os trade-offs de custo-benefício entre busca lexical e busca híbrida?",
+      "priority": "high",
+      "sufficiency": "o material detalha os prós e contras de cada abordagem, incluindo precisão, recall, latência e complexidade.",
+      "status": "OPEN",
+      "attempts": 0,
+      "evidence_ids": [],
+      "limitation": null,
+      "depth": 1
+    },
+    {
+      "id": "Q3",
+      "question": "Quais são as implicações de cada abordagem para a precisão e recall?",
+      "priority": "medium",
+      "sufficiency": "o material compara como cada abordagem afeta a recuperação de documentos relevantes.",
+      "status": "OPEN",
+      "attempts": 0,
+      "evidence_ids": [],
+      "limitation": null,
+      "depth": 1
+    }
+  ],
+  "sources": [],
+  "evidence": [],
+  "claims": [],
+  "budget": {
+    "rounds": 0,
+    "max_rounds": 8,
+    "searches": 0,
+    "max_searches": 12,
+    "pages_fetched": 0,
+    "max_pages": 18,
+    "llm_investigation_calls": 1,
+    "llm_reserved_calls": 0,
+    "max_llm_calls": 40,
+    "reserved_llm_calls": 8,
+    "remaining_seconds": 3515.171
+  },
+  "token_usage": {
+    "known_tokens": 378
+  },
+  "status": "parcial",
+  "stop_reason": null,
+  "round_number": 0,
+  "query_history": [],
+  "operational_failures": []
+}
