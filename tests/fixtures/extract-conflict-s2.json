@@ -1,0 +1,16 @@
+{
+  "claims": [
+    {
+      "text": "A busca lexical é mais rápida que a híbrida em geral.",
+      "type": "direct",
+      "quotes": [{"source_id": "S2", "chunk_index": 0, "quote": "lexical search requires exact term matching and fails on synonyms"}],
+      "scope_or_caveat": null
+    },
+    {
+      "text": "A busca híbrida é sempre mais lenta que a lexical.",
+      "type": "direct",
+      "quotes": [{"source_id": "S2", "chunk_index": 0, "quote": "hybrid retrieval combines exact term matching with semantic similarity at higher computational cost"}],
+      "scope_or_caveat": null
+    }
+  ]
+}

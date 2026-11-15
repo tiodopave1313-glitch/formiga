@@ -1,0 +1,3 @@
+{
+  "answer_markdown": "A busca lexical exige correspondência exata de termos e falha com sinônimos [S1]. A busca híbrida combina termos exatos com similaridade semântica, ao custo de mais recursos [S2]."
+}

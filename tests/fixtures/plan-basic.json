@@ -1,0 +1,9 @@
+{
+  "objective": "Comparar busca lexical e busca híbrida quanto a trade-offs",
+  "assumptions": ["O usuário busca vantagens e desvantagens técnicas, não produtos específicos"],
+  "sufficiency_criteria": ["Duas fontes independentes descrevendo cada abordagem"],
+  "questions": [
+    {"question": "Como funciona a busca lexical e quais são suas limitações?", "priority": "high", "sufficiency": "Descrição de funcionamento e limitações em pelo menos uma fonte"},
+    {"question": "Quais ganhos a busca híbrida traz e a que custo?", "priority": "high", "sufficiency": "Descrição de ganhos e custos em pelo menos uma fonte"}
+  ]
+}

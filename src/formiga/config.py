@@ -96,6 +96,7 @@ class Config:
         """
         updates: dict[str, object] = {}
         for key in (
+            "question",
             "model",
             "ollama_url",
             "searxng_url",

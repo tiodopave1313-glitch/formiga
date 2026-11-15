@@ -9,7 +9,7 @@ from pathlib import Path
 from formiga import __version__
 from formiga.config import Config, ConfigError
 from formiga.orchestrator import run_research
-from formiga.storage import StorageError
+from formiga.storage import OutputDirExists, StorageError
 
 EXIT_OK = 0
 EXIT_OPERATIONAL_FAILURE = 1
@@ -79,6 +79,9 @@ def main(argv: list[str] | None = None) -> int:
             print(result.report_path)
             print(f"status: {result.status}")
             return EXIT_OK
+        except OutputDirExists as exc:
+            print(f"Erro de entrada: {exc}", file=sys.stderr)
+            return EXIT_INVALID_INPUT
         except KeyboardInterrupt:
             print("Interrompido pelo usuário. Checkpoint salvo permanece legível.", file=sys.stderr)
             return EXIT_INTERRUPTED

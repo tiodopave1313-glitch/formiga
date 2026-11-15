@@ -1,0 +1,10 @@
+{
+  "claims": [
+    {
+      "text": "A busca lexical exige correspondência exata de termos e falha com sinônimos.",
+      "type": "direct",
+      "quotes": [{"source_id": "S1", "chunk_index": 0, "quote": "lexical search requires exact term matching and fails on synonyms"}],
+      "scope_or_caveat": "Descrito para índices invertidos clássicos"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "claims": [
+    {
+      "text": "A busca híbrida combina termos exatos com similaridade semântica, ao custo de mais recursos.",
+      "type": "direct",
+      "quotes": [{"source_id": "S1", "chunk_index": 0, "quote": "hybrid retrieval combines exact term matching with semantic similarity at higher computational cost"}],
+      "scope_or_caveat": null
+    }
+  ]
+}

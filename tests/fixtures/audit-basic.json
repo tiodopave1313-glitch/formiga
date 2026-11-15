@@ -1,0 +1,6 @@
+{
+  "decisions": [
+    {"claim_id": "C1", "decision": "keep", "note": null},
+    {"claim_id": "C2", "decision": "keep", "note": null}
+  ]
+}
