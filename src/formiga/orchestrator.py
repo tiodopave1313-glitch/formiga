@@ -115,7 +115,7 @@ def run_research(
 
         fetcher = SafeFetcher(config, remaining_seconds=budget.remaining_seconds)
 
-    def on_llm_call(_task: TaskType, _ok: bool, tokens: int | None) -> None:
+    def on_llm_call(_task: TaskType, _ok: bool, tokens: int | None, seconds: float | None) -> None:
         # Toda tentativa, inclusive falha e correção de formato, consome orçamento.
         reserved = _task in (TaskType.SYNTHESIZE, TaskType.AUDIT)
         budget.consume_llm(reserved=reserved)
@@ -128,6 +128,16 @@ def run_research(
             state.token_usage["unknown_calls"] = (
                 state.token_usage.get("unknown_calls", 0) + 1
             )
+        append_event(
+            output_dir,
+            "llm_call",
+            {
+                "task": _task.value,
+                "ok": _ok,
+                "tokens": tokens,
+                "seconds": round(seconds, 2) if seconds is not None else None,
+            },
+        )
 
     caller = StructuredCaller(client, on_call=on_llm_call)
     state = ResearchState(contract=ResearchContract(question=config.question or "", objective=""))

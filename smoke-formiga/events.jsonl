@@ -1,1 +1,12 @@
-{"ts": "2026-11-15T08:00:46Z", "type": "run_started", "data": {"question": "Quais são os trade-offs entre busca lexical e busca híbrida?"}}
+{"ts": "2026-11-15T08:04:09Z", "type": "run_started", "data": {"question": "Quais são os trade-offs entre busca lexical e busca híbrida?"}}
+{"ts": "2026-11-15T08:05:31Z", "type": "planned", "data": {"questions": 4}}
+{"ts": "2026-11-15T08:05:31Z", "type": "round_started", "data": {"round": 1, "question": "Q1"}}
+{"ts": "2026-11-15T08:06:29Z", "type": "search", "data": {"question": "Q1", "query": "trade-offs lexical vs hybrid search recall precision latency interpretability cost"}}
+{"ts": "2026-11-15T08:06:30Z", "type": "page_fetch", "data": {"url": "https://arxiv.org/html/2508.01405v2"}}
+{"ts": "2026-11-15T08:06:33Z", "type": "page_fetch", "data": {"url": "https://arxiv.org/pdf/2508.01405"}}
+{"ts": "2026-11-15T08:06:33Z", "type": "page_failed", "data": {"url": "https://arxiv.org/pdf/2508.01405", "reason": "Conteúdo excede 2097152 bytes."}}
+{"ts": "2026-11-15T08:06:33Z", "type": "page_fetch", "data": {"url": "https://journal.aptika.org/index.php/jistics/article/download/245/40"}}
+{"ts": "2026-11-15T08:06:36Z", "type": "page_failed", "data": {"url": "https://journal.aptika.org/index.php/jistics/article/download/245/40", "reason": "Tipo de conteúdo não suportado: application/pdf."}}
+{"ts": "2026-11-15T08:06:36Z", "type": "search", "data": {"question": "Q1", "query": "hybrid search fusion points query vs document"}}
+{"ts": "2026-11-15T08:06:38Z", "type": "round_ended", "data": {"round": 1, "question": "Q1", "progress": false}}
+{"ts": "2026-11-15T08:06:38Z", "type": "round_started", "data": {"round": 2, "question": "Q2"}}

@@ -5,9 +5,11 @@ from __future__ import annotations
 import httpx
 import pytest
 
+from formiga import prompts
 from formiga.config import Config, ConfigError
 from formiga.llamacpp import LlamaCppClient, LlamaCppError
-from formiga.orchestrator import build_llm_client
+from formiga.orchestrator import build_llm_client, run_research
+from formiga.storage import load_state
 
 
 def make_client(handler, **kwargs) -> LlamaCppClient:
@@ -137,3 +139,89 @@ class TestLlmTimeout:
         config = Config(llm_timeout=300.0)
         client = build_llm_client(config, remaining_seconds=lambda: 45.0)
         assert client._effective_timeout() == 45.0  # noqa: SLF001
+
+
+class TestMaxTokens:
+    def test_llamacpp_sends_max_tokens(self):
+        captured: dict = {}
+        client = make_client(capture_handler(captured))
+        client.complete("s", "u", None, 256)
+        import json
+
+        body = json.loads(captured["body"].content)
+        assert body["max_tokens"] == 256
+
+    def test_ollama_sends_num_predict(self):
+        import json
+
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["body"] = json.loads(request.content)
+            return httpx.Response(
+                200,
+                json={"message": {"role": "assistant", "content": "x"}, "eval_count": 1},
+            )
+
+        from formiga.ollama import OllamaClient
+
+        client = OllamaClient(Config(), transport=httpx.MockTransport(handler))
+        client.complete("s", "u", None, 256)
+        assert captured["body"]["options"]["num_predict"] == 256
+
+    def test_task_limits_are_sane(self):
+        from formiga.llm import TASK_MAX_TOKENS, TaskType
+
+        assert TASK_MAX_TOKENS[TaskType.QUERY] <= 128
+        assert TASK_MAX_TOKENS[TaskType.SYNTHESIZE] <= 900
+        assert all(v >= 64 for v in TASK_MAX_TOKENS.values())
+
+
+class TestTransportFailureIsConservative:
+    def test_llm_error_returns_none_and_consumes_budget(self, tmp_path):
+        from formiga.llm import StructuredCaller, TaskType
+        from formiga.schemas import QueryProposal
+
+        class FailingClient:
+            def complete(self, system, user, json_schema=None, max_tokens=None):
+                from formiga.llm import LLMError
+
+                raise LLMError("timed out")
+
+        calls: list[tuple] = []
+        caller = StructuredCaller(
+            FailingClient(), on_call=lambda *args: calls.append(args)
+        )
+        result = caller.call(
+            TaskType.QUERY,
+            prompts.SYSTEM,
+            prompts.query_prompt("Q", {"id": "Q1", "question": "sub?"}, []),
+            QueryProposal,
+        )
+        assert result is None
+        # Uma tentativa consumida, com falha registrada.
+        assert len(calls) == 1
+        task, ok, tokens, seconds = calls[0]
+        assert task == TaskType.QUERY and ok is False
+        assert seconds is not None and seconds >= 0.0
+
+    def test_orchestrator_survives_llm_failure(self, tmp_path):
+        from fakes import FakeFetcher, FakeLLM, FakeSearch, load_script
+
+        class FlakyLLM(FakeLLM):
+            def complete(self, system, user, json_schema=None, max_tokens=None):
+                if user.startswith("Tarefa: propor"):
+                    from formiga.llm import LLMError
+
+                    raise LLMError("timed out")
+                return super().complete(system, user, json_schema, max_tokens)
+
+        llm = FlakyLLM(load_script({"PLAN": ["plan-basic"]}))
+        config = Config(question="Q?", output=tmp_path / "out")
+        result = run_research(
+            config, client=llm, search=FakeSearch({}), fetcher=FakeFetcher({})
+        )
+        state = load_state(config.output)
+        # Consultas falharam; questões esgotam sem progredir — mas o run termina.
+        assert result.status == "bloqueada"
+        assert state.questions

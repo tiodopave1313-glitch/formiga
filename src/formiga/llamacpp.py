@@ -13,10 +13,10 @@ from collections.abc import Callable
 import httpx
 
 from formiga.config import Config
-from formiga.llm import LLMResponse
+from formiga.llm import LLMError, LLMResponse
 
 
-class LlamaCppError(Exception):
+class LlamaCppError(LLMError):
     """Falha de comunicação com o llama-server."""
 
 
@@ -39,7 +39,11 @@ class LlamaCppClient:
         return max(0.05, min(self.llm_timeout, self._remaining()))
 
     def complete(
-        self, system: str, user: str, json_schema: dict | None = None
+        self,
+        system: str,
+        user: str,
+        json_schema: dict | None = None,
+        max_tokens: int | None = None,
     ) -> LLMResponse:
         payload: dict = {
             "messages": [
@@ -52,6 +56,8 @@ class LlamaCppClient:
         }
         if json_schema is not None:
             payload["response_format"]["schema"] = json_schema
+        if max_tokens is not None:
+            payload["max_tokens"] = max_tokens
         try:
             with httpx.Client(
                 timeout=self._effective_timeout(), transport=self._transport

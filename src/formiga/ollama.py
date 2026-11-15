@@ -11,10 +11,10 @@ from collections.abc import Callable
 import httpx
 
 from formiga.config import Config
-from formiga.llm import LLMResponse
+from formiga.llm import LLMError, LLMResponse
 
 
-class OllamaError(Exception):
+class OllamaError(LLMError):
     """Falha de comunicação com o Ollama."""
 
 
@@ -38,10 +38,14 @@ class OllamaClient:
         return max(0.05, min(self.llm_timeout, self._remaining()))
 
     def complete(
-        self, system: str, user: str, json_schema: dict | None = None
+        self,
+        system: str,
+        user: str,
+        json_schema: dict | None = None,
+        max_tokens: int | None = None,
     ) -> LLMResponse:
         # O Ollama usa `format: "json"`; o schema é imposto pela validação do harness.
-        payload = {
+        payload: dict = {
             "model": self.model,
             "messages": [
                 {"role": "system", "content": system},
@@ -51,6 +55,8 @@ class OllamaClient:
             "format": "json",
             "options": {"temperature": 0.2},
         }
+        if max_tokens is not None:
+            payload["options"]["num_predict"] = max_tokens
         try:
             with httpx.Client(
                 timeout=self._effective_timeout(), transport=self._transport
