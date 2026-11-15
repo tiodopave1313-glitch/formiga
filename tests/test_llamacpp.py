@@ -114,3 +114,26 @@ class TestBackendSelection:
     def test_llamacpp_url_validated(self):
         with pytest.raises(ConfigError):
             Config(llamacpp_url="nope").validate()
+
+
+class TestLlmTimeout:
+    def test_default_matches_generation_on_cpu(self):
+        assert Config().llm_timeout == 120.0
+
+    def test_env_timeout(self):
+        config = Config.from_env({"FORMIGA_LLM_TIMEOUT": "300"})
+        assert config.llm_timeout == 300.0
+
+    def test_invalid_env_timeout(self):
+        with pytest.raises(ConfigError):
+            Config.from_env({"FORMIGA_LLM_TIMEOUT": "abc"})
+
+    def test_client_uses_llm_timeout_not_network_timeout(self):
+        config = Config(llm_timeout=300.0, network_timeout=5.0)
+        client = build_llm_client(config)
+        assert client._effective_timeout() == 300.0  # noqa: SLF001
+
+    def test_client_capped_by_remaining_time(self):
+        config = Config(llm_timeout=300.0)
+        client = build_llm_client(config, remaining_seconds=lambda: 45.0)
+        assert client._effective_timeout() == 45.0  # noqa: SLF001

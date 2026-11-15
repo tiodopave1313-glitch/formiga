@@ -24,6 +24,9 @@ DEFAULT_NO_PROGRESS_ROUNDS = 2
 DEFAULT_FORMAT_RETRIES = 1
 DEFAULT_MAX_HTTP_BYTES = 2 * 1024 * 1024
 DEFAULT_NETWORK_TIMEOUT = 20.0
+DEFAULT_LLM_TIMEOUT = 120.0  # geração do 8B em CPU leva dezenas de segundos
+
+ENV_LLM_TIMEOUT = "FORMIGA_LLM_TIMEOUT"
 
 ENV_MODEL = "FORMIGA_MODEL"
 ENV_OLLAMA_URL = "FORMIGA_OLLAMA_URL"
@@ -82,6 +85,7 @@ class Config:
     format_retries: int = DEFAULT_FORMAT_RETRIES
     max_http_bytes: int = DEFAULT_MAX_HTTP_BYTES
     network_timeout: float = DEFAULT_NETWORK_TIMEOUT
+    llm_timeout: float = DEFAULT_LLM_TIMEOUT
 
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> Config:
@@ -97,6 +101,11 @@ class Config:
             config = replace(config, llm_backend=backend)
         if (llamacpp := _env(env, ENV_LLAMACPP_URL)) is not None:
             config = replace(config, llamacpp_url=llamacpp)
+        if (llm_timeout := _env(env, ENV_LLM_TIMEOUT)) is not None:
+            try:
+                config = replace(config, llm_timeout=float(llm_timeout))
+            except ValueError as exc:
+                raise ConfigError(f"FORMIGA_LLM_TIMEOUT não é um número: {llm_timeout!r}.") from exc
         config.validate()
         return config
 
@@ -130,6 +139,7 @@ class Config:
             "format_retries",
             "max_http_bytes",
             "network_timeout",
+            "llm_timeout",
         ):
             value = getattr(args, key, None)
             if value is not None and value != getattr(self, key):
@@ -158,7 +168,7 @@ class Config:
         )
         for name, value in int_fields:
             _positive_int(name, value)
-        for name in ("network_timeout", "timeout_seconds"):
+        for name in ("network_timeout", "timeout_seconds", "llm_timeout"):
             value = getattr(self, name)
             if value <= 0:
                 raise ConfigError(f"{name} deve ser positivo (recebido: {value}).")

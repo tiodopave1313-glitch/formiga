@@ -67,15 +67,17 @@ class LLMClientProtocol(Protocol):
     ) -> LLMResponse: ...
 
 
-def build_llm_client(config: Config) -> LLMClientProtocol:
+def build_llm_client(
+    config: Config, remaining_seconds: Callable[[], float] | None = None
+) -> LLMClientProtocol:
     """Escolhe o backend de modelo conforme `config.llm_backend`."""
     if config.llm_backend == "llamacpp":
         from formiga.llamacpp import LlamaCppClient
 
-        return LlamaCppClient(config)
+        return LlamaCppClient(config, remaining_seconds=remaining_seconds)
     from formiga.ollama import OllamaClient
 
-    return OllamaClient(config)
+    return OllamaClient(config, remaining_seconds=remaining_seconds)
 
 
 @dataclass
@@ -103,7 +105,7 @@ def run_research(
     progress(f"Saída: {output_dir}")
 
     if client is None:
-        client = build_llm_client(config)
+        client = build_llm_client(config, remaining_seconds=budget.remaining_seconds)
     if search is None:
         from formiga.searxng import SearxngSearch
 

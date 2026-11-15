@@ -57,6 +57,7 @@ legível), mas **não são retomadas** no MVP.
 | `--max-pages N` | Limite de páginas (default 18) |
 | `--max-llm-calls N` | Limite total de chamadas (default 40; 8 reservadas para síntese/auditoria) |
 | `--timeout-seconds N` | Tempo máximo da execução (default 900) |
+| `--llm-timeout-seconds N` | Timeout por chamada ao modelo (default 120; CPU lenta pode exigir mais) |
 | `--overwrite` | Autoriza sobrescrever um diretório de saída existente |
 | `--verbose` | Eventos operacionais no stderr |
 
@@ -70,6 +71,7 @@ FORMIGA_OLLAMA_URL=http://localhost:11434
 FORMIGA_SEARXNG_URL=http://localhost:8080
 FORMIGA_LLM_BACKEND=ollama          # ou: llamacpp
 FORMIGA_LLAMACPP_URL=http://localhost:8080   # endpoint do llama-server
+FORMIGA_LLM_TIMEOUT=120             # timeout por chamada ao modelo (segundos)
 ```
 
 O modelo padrão é uma escolha inicial de implementação, não uma exigência de

@@ -6,6 +6,8 @@ Tokens são registrados quando o backend os fornece; caso contrário, `unknown`.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import httpx
 
 from formiga.config import Config
@@ -17,11 +19,23 @@ class OllamaError(Exception):
 
 
 class OllamaClient:
-    def __init__(self, config: Config, transport: httpx.BaseTransport | None = None) -> None:
+    def __init__(
+        self,
+        config: Config,
+        transport: httpx.BaseTransport | None = None,
+        remaining_seconds: Callable[[], float] | None = None,
+    ) -> None:
         self.url = config.ollama_url.rstrip("/")
         self.model = config.model
-        self.timeout = config.network_timeout
+        self.llm_timeout = config.llm_timeout
+        self._remaining = remaining_seconds
         self._transport = transport
+
+    def _effective_timeout(self) -> float:
+        """Timeout da geração limitado ao tempo restante da execução."""
+        if self._remaining is None:
+            return self.llm_timeout
+        return max(0.05, min(self.llm_timeout, self._remaining()))
 
     def complete(
         self, system: str, user: str, json_schema: dict | None = None
@@ -38,7 +52,9 @@ class OllamaClient:
             "options": {"temperature": 0.2},
         }
         try:
-            with httpx.Client(timeout=self.timeout, transport=self._transport) as client:
+            with httpx.Client(
+                timeout=self._effective_timeout(), transport=self._transport
+            ) as client:
                 response = client.post(f"{self.url}/api/chat", json=payload)
             response.raise_for_status()
             data = response.json()

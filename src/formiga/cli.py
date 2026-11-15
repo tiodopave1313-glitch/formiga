@@ -50,6 +50,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--timeout-seconds", dest="timeout_seconds", type=int, help="Tempo máximo da execução."
     )
     research.add_argument(
+        "--llm-timeout-seconds",
+        dest="llm_timeout",
+        type=float,
+        help="Timeout por chamada ao modelo (default 120; CPU lenta pode exigir mais).",
+    )
+    research.add_argument(
         "--overwrite",
         action="store_true",
         help="Autoriza sobrescrever um diretório de saída existente.",
