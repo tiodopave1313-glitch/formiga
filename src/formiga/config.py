@@ -41,6 +41,16 @@ ENV_LLAMACPP_URL = "FORMIGA_LLAMACPP_URL"
 ENV_LLAMACPP_THINKING = "FORMIGA_LLAMACPP_THINKING"
 ENV_LLM_THINKING = "FORMIGA_LLM_THINKING"
 
+# Seção [agent] do formiga.toml (harness agêntico, docs/prd_agent.md).
+ENV_AGENT_MAX_TURNS = "FORMIGA_AGENT_MAX_TURNS"
+ENV_AGENT_MAX_LLM_CALLS = "FORMIGA_AGENT_MAX_LLM_CALLS"
+ENV_AGENT_TIMEOUT_SECONDS = "FORMIGA_AGENT_TIMEOUT_SECONDS"
+ENV_AGENT_MAX_DEEP_SEARCHES = "FORMIGA_AGENT_MAX_DEEP_SEARCHES"
+ENV_AGENT_MAX_WEB_SEARCHES = "FORMIGA_AGENT_MAX_WEB_SEARCHES"
+ENV_AGENT_MAX_WEB_FETCHES = "FORMIGA_AGENT_MAX_WEB_FETCHES"
+ENV_AGENT_TOOL_RESULT_CHARS = "FORMIGA_AGENT_TOOL_RESULT_CHARS"
+ENV_AGENT_WORKDIR = "FORMIGA_AGENT_WORKDIR"
+
 ENV_OPENAI_URL = "FORMIGA_OPENAI_URL"
 ENV_OPENAI_API_KEY_ENV = "FORMIGA_OPENAI_API_KEY_ENV"
 ENV_FALLBACK_BACKEND = "FORMIGA_FALLBACK_BACKEND"
@@ -138,6 +148,16 @@ class Config:
     llm_timeout: float = DEFAULT_LLM_TIMEOUT
     llm_temperature: float = DEFAULT_LLM_TEMPERATURE
 
+    # Harness agêntico (seção 9 do PRD docs/prd_agent.md).
+    agent_max_turns: int = 24
+    agent_max_llm_calls: int = 120
+    agent_timeout_seconds: float = 1800.0
+    agent_max_deep_searches: int = 2
+    agent_max_web_searches: int = 6
+    agent_max_web_fetches: int = 8
+    agent_tool_result_chars: int = 4000
+    agent_workdir: str = "."
+
     @classmethod
     def from_sources(
         cls,
@@ -195,6 +215,23 @@ class Config:
                 raise ConfigError(
                     f"FORMIGA_LLM_TEMPERATURE não é um número: {temperature!r}."
                 ) from exc
+        # Seção [agent]
+        if (v := _env(env, ENV_AGENT_MAX_TURNS)) is not None:
+            config = replace(config, agent_max_turns=int(v))
+        if (v := _env(env, ENV_AGENT_MAX_LLM_CALLS)) is not None:
+            config = replace(config, agent_max_llm_calls=int(v))
+        if (v := _env(env, ENV_AGENT_TIMEOUT_SECONDS)) is not None:
+            config = replace(config, agent_timeout_seconds=float(v))
+        if (v := _env(env, ENV_AGENT_MAX_DEEP_SEARCHES)) is not None:
+            config = replace(config, agent_max_deep_searches=int(v))
+        if (v := _env(env, ENV_AGENT_MAX_WEB_SEARCHES)) is not None:
+            config = replace(config, agent_max_web_searches=int(v))
+        if (v := _env(env, ENV_AGENT_MAX_WEB_FETCHES)) is not None:
+            config = replace(config, agent_max_web_fetches=int(v))
+        if (v := _env(env, ENV_AGENT_TOOL_RESULT_CHARS)) is not None:
+            config = replace(config, agent_tool_result_chars=int(v))
+        if (v := _env(env, ENV_AGENT_WORKDIR)) is not None:
+            config = replace(config, agent_workdir=v)
         config.validate()
         return config
 
@@ -248,6 +285,14 @@ class Config:
             "network_timeout",
             "llm_timeout",
             "llm_temperature",
+            "agent_max_turns",
+            "agent_max_llm_calls",
+            "agent_timeout_seconds",
+            "agent_max_deep_searches",
+            "agent_max_web_searches",
+            "agent_max_web_fetches",
+            "agent_tool_result_chars",
+            "agent_workdir",
         ):
             value = getattr(args, key, None)
             if value is not None and value != getattr(self, key):
@@ -273,6 +318,13 @@ class Config:
             ("no_progress_rounds", self.no_progress_rounds),
             ("format_retries", self.format_retries),
             ("max_http_bytes", self.max_http_bytes),
+            ("agent_max_turns", self.agent_max_turns),
+            ("agent_max_llm_calls", self.agent_max_llm_calls),
+            ("agent_timeout_seconds", self.agent_timeout_seconds),
+            ("agent_max_deep_searches", self.agent_max_deep_searches),
+            ("agent_max_web_searches", self.agent_max_web_searches),
+            ("agent_max_web_fetches", self.agent_max_web_fetches),
+            ("agent_tool_result_chars", self.agent_tool_result_chars),
         )
         for name, value in int_fields:
             _positive_int(name, value)

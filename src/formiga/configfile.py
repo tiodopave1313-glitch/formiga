@@ -67,15 +67,32 @@ _BUDGET_KEYS = {
     "max_llm_calls": "max_llm_calls",
     "timeout_seconds": "timeout_seconds",
 }
-_SECTIONS = {"llm": _LLM_KEYS, "search": _SEARCH_KEYS, "budget": _BUDGET_KEYS}
+_AGENT_KEYS = {
+    "max_turns": "agent_max_turns",
+    "max_llm_calls": "agent_max_llm_calls",
+    "timeout_seconds": "agent_timeout_seconds",
+    "max_deep_searches": "agent_max_deep_searches",
+    "max_web_searches": "agent_max_web_searches",
+    "max_web_fetches": "agent_max_web_fetches",
+    "tool_result_chars": "agent_tool_result_chars",
+    "workdir": "agent_workdir",
+}
+_SECTIONS = {"llm": _LLM_KEYS, "search": _SEARCH_KEYS, "budget": _BUDGET_KEYS, "agent": _AGENT_KEYS}
 
-_FLOAT_FIELDS = {"llm_temperature", "llm_timeout", "timeout_seconds"}
+_FLOAT_FIELDS = {"llm_temperature", "llm_timeout", "timeout_seconds", "agent_timeout_seconds"}
 _INT_FIELDS = {
     "max_searches",
     "max_pages",
     "max_llm_calls",
     "llm_max_retries",
     "fallback_after_failures",
+    "agent_max_turns",
+    "agent_max_llm_calls",
+    "agent_timeout_seconds",
+    "agent_max_deep_searches",
+    "agent_max_web_searches",
+    "agent_max_web_fetches",
+    "agent_tool_result_chars",
 }
 _BOOL_FIELDS = {"llm_thinking"}
 _NULLABLE_STR_FIELDS = {"fallback_backend"}

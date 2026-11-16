@@ -10,6 +10,7 @@ from collections.abc import Callable
 
 import httpx
 
+from formiga.agent.chat import ChatResponse, ToolCall
 from formiga.config import Config
 from formiga.llm import LLMError, LLMResponse
 
@@ -97,5 +98,68 @@ class OllamaClient:
         truncated = data.get("done_reason") == "length"
         return LLMResponse(
             content=content, tokens=tokens if isinstance(tokens, int) else None,
+            truncated=truncated,
+        )
+
+    def chat(
+        self,
+        messages: list[dict],
+        tools: list[dict] | None = None,
+        max_tokens: int | None = None,
+    ) -> ChatResponse:
+        """Chat com histórico e (opcional) chamadas de ferramenta no Ollama."""
+        payload: dict = {
+            "model": self.model,
+            "messages": messages,
+            "stream": False,
+            "options": {
+                "temperature": self.temperature,
+                "top_k": 64,
+                "top_p": 0.95,
+            },
+        }
+        if tools:
+            payload["tools"] = tools
+        if self.think:
+            payload["think"] = True
+        if max_tokens is not None:
+            payload["options"]["num_predict"] = max_tokens
+        try:
+            with httpx.Client(
+                timeout=self._effective_timeout(), transport=self._transport
+            ) as client:
+                response = client.post(f"{self.url}/api/chat", json=payload)
+                if response.status_code == 400 and self.think:
+                    body = response.text.lower()
+                    if "think" in body:
+                        self.think = False
+                        del payload["think"]
+                        response = client.post(f"{self.url}/api/chat", json=payload)
+                response.raise_for_status()
+                data = response.json()
+        except httpx.HTTPError as exc:
+            raise OllamaError(f"Falha ao chamar o Ollama: {exc}") from exc
+        except ValueError as exc:
+            raise OllamaError(f"Resposta não-JSON do Ollama: {exc}") from exc
+        try:
+            message = data["message"]
+        except (KeyError, TypeError) as exc:
+            raise OllamaError(f"Resposta do Ollama sem mensagem: {data!r}") from exc
+        content = message.get("content")
+        tool_calls_raw = message.get("tool_calls")
+        truncated = data.get("done_reason") == "length"
+        tool_calls: list[ToolCall] | None = None
+        if tool_calls_raw:
+            tool_calls = [
+                ToolCall(
+                    id=tc.get("id", ""),
+                    name=tc.get("function", {}).get("name", ""),
+                    arguments=tc.get("function", {}).get("arguments", "{}"),
+                )
+                for tc in tool_calls_raw
+            ]
+        return ChatResponse(
+            content=content if isinstance(content, str) else None,
+            tool_calls=tool_calls,
             truncated=truncated,
         )

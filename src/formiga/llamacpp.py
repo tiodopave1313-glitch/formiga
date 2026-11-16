@@ -12,6 +12,7 @@ from collections.abc import Callable
 
 import httpx
 
+from formiga.agent.chat import ChatResponse, ToolCall
 from formiga.config import Config
 from formiga.llm import LLMError, LLMResponse
 
@@ -101,5 +102,63 @@ class LlamaCppClient:
             raise LlamaCppError(f"Resposta do llama-server sem conteúdo: {data!r}")
         return LLMResponse(
             content=content, tokens=tokens if isinstance(tokens, int) else None,
+            truncated=truncated,
+        )
+
+    def chat(
+        self,
+        messages: list[dict],
+        tools: list[dict] | None = None,
+        max_tokens: int | None = None,
+    ) -> ChatResponse:
+        """Chat com histórico e (opcional) chamadas de ferramenta no llama-server."""
+        payload: dict = {
+            "messages": messages,
+            "temperature": self.temperature,
+            "top_k": 64,
+            "top_p": 0.95,
+            "stream": False,
+        }
+        if tools:
+            payload["tools"] = tools
+            payload["tool_choice"] = "auto"
+        if self.disable_thinking:
+            payload["chat_template_kwargs"] = {"enable_thinking": False}
+        else:
+            payload["chat_template_kwargs"] = {"enable_thinking": True}
+        if max_tokens is not None:
+            payload["max_tokens"] = max_tokens
+        try:
+            with httpx.Client(
+                timeout=self._effective_timeout(), transport=self._transport
+            ) as client:
+                response = client.post(f"{self.url}/v1/chat/completions", json=payload)
+            response.raise_for_status()
+            data = response.json()
+        except httpx.HTTPError as exc:
+            raise LlamaCppError(f"Falha ao chamar o llama-server: {exc}") from exc
+        except ValueError as exc:
+            raise LlamaCppError(f"Resposta não-JSON do llama-server: {exc}") from exc
+        try:
+            choice = data["choices"][0]
+            message = choice["message"]
+        except (KeyError, IndexError, TypeError) as exc:
+            raise LlamaCppError(f"Resposta do llama-server sem conteúdo: {data!r}") from exc
+        content = message.get("content")
+        tool_calls_raw = message.get("tool_calls")
+        truncated = choice.get("finish_reason") == "length"
+        tool_calls: list[ToolCall] | None = None
+        if tool_calls_raw:
+            tool_calls = [
+                ToolCall(
+                    id=tc.get("id", ""),
+                    name=tc.get("function", {}).get("name", ""),
+                    arguments=tc.get("function", {}).get("arguments", "{}"),
+                )
+                for tc in tool_calls_raw
+            ]
+        return ChatResponse(
+            content=content if isinstance(content, str) else None,
+            tool_calls=tool_calls,
             truncated=truncated,
         )

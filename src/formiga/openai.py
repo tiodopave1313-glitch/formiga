@@ -30,6 +30,7 @@ from collections.abc import Callable
 
 import httpx
 
+from formiga.agent.chat import ChatResponse, ToolCall
 from formiga.config import Config, ConfigError
 from formiga.llm import LLMError, LLMResponse
 
@@ -183,6 +184,103 @@ class OpenAIClient:
             except ValueError:
                 pass
         return min(DEFAULT_BACKOFF_SECONDS * (2 ** (attempt - 1)), MAX_BACKOFF_SECONDS)
+
+    def chat(
+        self,
+        messages: list[dict],
+        tools: list[dict] | None = None,
+        max_tokens: int | None = None,
+    ) -> ChatResponse:
+        """Chat com histórico e (opcional) chamadas de ferramenta.
+
+        Sem `tools`, o modelo responde com texto. Com `tools`, pode emitir
+        `tool_calls` no lugar do texto (uma por iteração no MVP).
+        """
+        with_format = False  # tool calls já são restritos pelo schema do backend
+        with_thinking = self.thinking
+        attempt = 0
+        while True:
+            attempt += 1
+            payload = self._chat_payload(
+                messages, tools, max_tokens, with_format, with_thinking
+            )
+            try:
+                response = self._request(payload)
+            except httpx.HTTPError as exc:
+                raise OpenAIError(f"Falha ao chamar o endpoint remoto: {exc}") from exc
+            status = response.status_code
+            if status in RETRYABLE_STATUSES and attempt <= self.max_retries:
+                delay = self._retry_delay(response, attempt)
+                if self.on_retry is not None:
+                    self.on_retry(status, attempt, delay)
+                time.sleep(delay)
+                continue
+            body = response.content.lower()
+            if status == 400 and with_thinking and (
+                b"chat_template_kwargs" in body
+                or b"skip_special_tokens" in body
+                or b"thinking" in body
+            ):
+                with_thinking = False
+                continue
+            if status >= 400:
+                raise OpenAIError(f"HTTP {status} do endpoint remoto: {_snippet(response)}")
+            try:
+                data = response.json()
+            except ValueError as exc:
+                raise OpenAIError(f"Resposta não-JSON do endpoint remoto: {exc}") from exc
+            return self._parse_chat(data)
+
+    def _chat_payload(
+        self,
+        messages: list[dict],
+        tools: list[dict] | None,
+        max_tokens: int | None,
+        with_format: bool,
+        with_thinking: bool = False,
+    ) -> dict:
+        payload: dict = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": self.temperature,
+            "top_p": 0.95,
+            "stream": False,
+        }
+        if max_tokens is not None:
+            payload["max_tokens"] = max_tokens
+        if tools:
+            payload["tools"] = tools
+            payload["tool_choice"] = "auto"
+        if with_thinking:
+            payload["chat_template_kwargs"] = {"enable_thinking": True}
+            payload["skip_special_tokens"] = False
+        return payload
+
+    @staticmethod
+    def _parse_chat(data: dict) -> ChatResponse:
+        try:
+            choice = data["choices"][0]
+            message = choice["message"]
+        except (KeyError, IndexError, TypeError) as exc:
+            raise OpenAIError(f"Resposta do endpoint remoto sem conteúdo: {data!r}") from exc
+        content = message.get("content")
+        tool_calls_raw = message.get("tool_calls")
+        truncated = choice.get("finish_reason") == "length"
+        tool_calls: list[ToolCall] | None = None
+        if tool_calls_raw:
+            tool_calls = [
+                ToolCall(
+                    id=tc.get("id", ""),
+                    name=tc.get("function", {}).get("name", ""),
+                    arguments=tc.get("function", {}).get("arguments", "{}"),
+                )
+                for tc in tool_calls_raw
+            ]
+        return ChatResponse(
+            content=content if isinstance(content, str) else None,
+            tool_calls=tool_calls,
+            truncated=truncated,
+        )
 
     @staticmethod
     def _parse(data: dict) -> LLMResponse:

@@ -41,3 +41,14 @@ max_searches = 12
 max_pages = 18
 max_llm_calls = 40
 timeout_seconds = 900
+
+[agent]
+# Harness agêntico (docs/prd_agent.md).
+max_turns = 24
+max_llm_calls = 120
+timeout_seconds = 1800
+max_deep_searches = 2
+max_web_searches = 6
+max_web_fetches = 8
+tool_result_chars = 4000
+workdir = "."
