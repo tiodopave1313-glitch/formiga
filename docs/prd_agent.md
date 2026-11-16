@@ -2,7 +2,7 @@
 
 **Arquivo:** `prd_agent.md`
 **Status:** proposta para implementação do MVP
-**Interface:** TUI (terminal)
+**Interface:** CLI interativa (padrão) · TUI Textual via `--tui` (extra `gui`) · `--print` headless
 **Linguagem:** Python 3.11+, Linux
 **Desenvolvimento:** OpenCode
 **Modelo de teste:** [Nemotron 3.5 Bolt E4B](https://build.nvidia.com/nvidia/nemotron-3.5-bolt-e4b) via endpoint OpenAI-compatível (NIM); Ollama e llama.cpp também suportados
@@ -66,13 +66,12 @@ produz pesquisa auditável. O desafio deste PRD é unir os dois mundos:
    (alvo: < 500 linhas em `loop.py` + `tools/`).
 2. Oito ferramentas: `ls`, `read`, `write`, `edit`, `bash`, `web_search`,
    `web_fetch`, `deep_search`.
-3. TUI minimalista (Textual): resposta em streaming no centro, eventos de
-   ferramenta em linha, entrada única, `Esc` interrompe.
+3. **Interfaces**: CLI interativa (padrão, texto corrido, streaming + ferramentas visíveis); TUI Textual opcional via `--tui` (extra `gui`); `--print` para modo headless/script.
 4. Guardrails de modelo pequeno (seção 7): orçamento, cap de resultado,
    parser tolerante, anti-loop, patch-first, bash delimitado.
 5. deep_search como ferramenta: o motor atual encapsulado, sem alterá-lo.
 6. Sessão persistida: `messages[]` + eventos em diretório de sessão.
-7. Testável offline: loop e TUI contra fakes, sem rede nem modelo real.
+7. Testável offline: loop, CLI e TUI contra fakes, sem rede nem modelo real.
 
 ### 3.2 Não objetivos
 
@@ -84,7 +83,7 @@ Ficam fora do MVP:
 - eval gate formal, RAG, rerank, embeddings;
 - model escalation / fallback para modelo maior (o failover de backend
   opt-in já existente em `fallback.py` continua disponível);
-- múltiplas sessões simultâneas na mesma TUI;
+- múltiplas sessões simultâneas na mesma CLI/TUI (cada `formiga agent` cria sessão independente);
 - memória entre sessões;
 - interface web, desktop, voz.
 
@@ -106,10 +105,11 @@ src/formiga/
 │   ├── guardrails.py         # anti-loop, result cap, budget do agente
 │   ├── prompts.py            # system prompt (dados delimitados, PT-BR)
 │   ├── session.py            # diretório de sessão (messages.json, events.jsonl)
+│   ├── cli.py                # CLI interativa padrão (loop de perguntas)
 │   └── tui/
-│       ├── app.py            # Textual: stream, eventos, entrada
+│       ├── app.py            # Textual: stream, eventos, entrada (via --tui)
 │       └── controller.py     # ponte loop ↔ TUI (thread de execução)
-├── cli.py                    # + formiga agent [PERGUNTA] [--session-dir DIR]
+├── cli.py                    # entrypoint: formiga agent [--print|--tui|interativo]
 └── (motor de pesquisa atual: orchestrator, budget, fetcher, evidence, …)
 ```
 
@@ -149,7 +149,7 @@ Regras:
   na mesma sessão.
 - `MAX_TURNS` por mensagem do usuário (default: 24); orçamento global da
   sessão em chamadas ao LLM (default: 120) e tempo (default: 1800 s).
-- Cancelamento cooperativo: `Esc` sinaliza o loop; a ferramenta em execução
+- Cancelamento cooperativo: `Esc` (TUI) / `Ctrl+C` (CLI) sinaliza o loop; a ferramenta em execução
   termina dentro do próprio timeout antes do encerramento.
 - Erros de ferramenta voltam ao modelo como resultado com prefixo
   `ERRO:` — o modelo decide tentar de novo ou responder.
@@ -240,51 +240,79 @@ abstenção é válida, não invente — cite o que a ferramenta retornou.
 
 ---
 
-## 8. TUI
+## 8. Interfaces
 
-Textual, seguindo os princípios do `prd_tui.md` (uma tela, pouco ruído,
-estado explícito, sem falsa precisão), adaptados ao agente:
+### 8.1 CLI interativa (padrão)
+
+Texto corrido simples no terminal (sem tela cheia, sem captura de mouse):
+mesmo `on_event` da TUI, impresso em stdout.
 
 ```text
- formiga agent                     nemotron-3.5-bolt-e4b
-──────────────────────────────────────────────────────────────
- Você
- Como faço para reduzir o consumo de RAM do meu servidor?
+$ formiga agent
+formiga agent · sessão: sessoes/2026-11-16_143012_a1b2
+transcript: sessoes/.../transcript.md · Ctrl+C interrompe · Ctrl+D sai
 
- Agent
- Vou primeiro inspecionar os serviços ativos.
+pergunta> como reduzir RAM do servidor?
 
-  ⚙ bash — systemctl list-units --type=service          1.2 s
-  ⚙ read — /etc/systemd/journald.conf                   0.1 s
-  Vou verificar a configuração do journald…
+⚙ bash — systemctl list-units --type=service
+  (1.2 s)
+⚙ read — /etc/systemd/journald.conf
+  (0.1 s)
+Vou verificar a configuração do journald…
 
-──────────────────────────────────────────────────────────────
- turnos 3/24 · chamadas 5/120 · ⠿ executando
-──────────────────────────────────────────────────────────────
- ❯ _
+turnos 3/24 · llm 5/120
+
+pergunta> _
 ```
 
 Requisitos:
+- **Stream do texto do agente** token a token.
+- **Eventos de ferramenta em linha**: `⚙ nome — args` + duração; erros como `✗ erro`.
+- **Linha de orçamento** entre turnos: `turnos X/Y · llm A/B`.
+- Entrada `pergunta>`; `Ctrl+C` no prompt sai; `Ctrl+C` na resposta interrompe só o turno.
+- `Ctrl+D` (EOF) sai apontando o `transcript.md`.
+- Funciona sem cores; alvo 80×24; sem animações.
 
-- **Stream do texto do agente** no centro, token a token.
-- **Eventos de ferramenta em linha**: símbolo, nome, argumento curto e
-  duração; detalhes (saída completa, erros) sob `Ctrl+O` no evento.
-- **Barra de status** com orçamento consumido (única barra percentual
-  permitida — é valor conhecido) e estado:
-  `ocioso · executando · interrompendo · erro`.
-- Entrada única `❯`; histórico ↑/↓; desabilitada durante execução.
-- `Esc`: confirmação de interrupção (padrão: continuar; cooperativo —
-  a TUI só mostra "interrompida" após o loop confirmar).
-- `Ctrl+L`: rolagem livre do buffer; `Ctrl+O`: último resultado de tool.
+### 8.2 TUI Textual (opcional, `--tui`, extra `gui`)
+
+```text
+  formiga agent --tui                  nemotron-3.5-bolt-e4b
+──────────────────────────────────────────────────────────────
+  Você
+  Como faço para reduzir o consumo de RAM do meu servidor?
+
+  Agent
+  Vou primeiro inspecionar os serviços ativos.
+
+   ⚙ bash — systemctl list-units --type=service          1.2 s
+   ⚙ read — /etc/systemd/journald.conf                   0.1 s
+   Vou verificar a configuração do journald…
+
+──────────────────────────────────────────────────────────────
+  turnos 3/24 · chamadas 5/120 · ⠿ executando
+──────────────────────────────────────────────────────────────
+  ❯ _
+```
+
+Requisitos (iguais à CLI, mais):
+- **Barra de status** fixa com orçamento e estado: `ocioso · executando · interrompendo · erro`.
+- `Esc`: confirmação de interrupção cooperativa.
+- `Ctrl+L`: rolagem livre; `Ctrl+O`: detalhes do último resultado de tool.
 - `Ctrl+Q`: sai (sessão permanece no disco).
-- Funciona sem cores (`NO_COLOR`); alvo 80×24; sem animações além de um
-  spinner.
-- Avisos: envio de conteúdo ao provedor de modelo remoto; comandos `bash`
-  visíveis antes da execução no stream de eventos.
 
-Fora do escopo da TUI: painéis permanentes, dashboards, múltiplas sessões,
-visualização do relatório dentro da TUI (o `read` do agente e o `less`
-cobrem).
+### 8.3 `--print` (headless)
+
+`formiga agent "pergunta" --print` → imprime só a resposta final no stdout.
+
+### 8.4 Frontends futuros
+
+Qualquer frontend (Web, prompt-toolkit, outro) pluga no mesmo ponto:
+`build_agent(config, session, on_event)` + `loop.run(question)` / `loop.cancel()`.
+O motor (`loop`, `factory`, `session`) não conhece a interface.
+
+Fora do escopo: painéis permanentes, dashboards, múltiplas sessões simultâneas
+numa única instância, visualização de relatório dentro da TUI (o `read` do
+agente e o `less` cobrem).
 
 ---
 
@@ -294,8 +322,10 @@ Reuso integral da precedência atual: **CLI > env > TOML > defaults**, com
 `.env` (0600) preenchendo variáveis ausentes.
 
 ```bash
-formiga agent                          # TUI, sessão nova
-formiga agent "pergunta"               # TUI com pergunta pré-preenchida
+formiga agent                          # CLI interativa, sessão nova
+formiga agent "pergunta"               # CLI interativa com pergunta pré-preenchida
+formiga agent --tui                    # TUI Textual (requer extra gui)
+formiga agent --tui "pergunta"         # TUI com pergunta pré-preenchida
 formiga agent --print "pergunta"       # modo headless: resposta única no stdout
 formiga agent --session-dir DIR       # retomar? não — apenas escolher diretório
 ```
@@ -386,21 +416,21 @@ Sem rede e sem modelo real, no padrão existente (`tests/fakes.py`):
 2. **Fase 2 — bash delimitado + web_search + web_fetch + deep_search como
    tools**: ponte com o orquestrador e com SearXNG/fetcher, orçamentos
    próprios, eventos do motor reexpostos.
-3. **Fase 3 — TUI**: stream, eventos em linha, barra de status, Esc
-   cooperativo, avisos.
+3. **Fase 3 — Interfaces**: CLI interativa (padrão) + TUI Textual opcional (`--tui`),
+   stream, eventos em linha, barra de status (TUI), Esc/Ctrl+C cooperativo, avisos.
 4. **Fase 4 — endurecimento**: anti-loop completo, caps, NO_COLOR,
    terminais pequenos, smoke test final.
 
 ### Critérios de aceite do MVP
 
-- [ ] `formiga agent` abre a TUI; pergunta por argumento aparece pré-preenchida.
+- [ ] `formiga agent` abre a CLI interativa; `--tui` abre a TUI; `--print` imprime resposta.
 - [ ] Uma tarefa mista (ler arquivo, rodar comando, pesquisar) conclui com
       resposta fundamentada em eventos reais da execução.
 - [ ] Orçamento exibido corresponde ao estado do loop; esgotamento encerra
       com resposta parcial e explicação.
 - [ ] Duas chamadas idênticas de tool recebem nudge; quatro encerram o turno.
 - [ ] `edit` nunca reescreve arquivo inteiro; `bash` recusa padrões da lista.
-- [ ] `Esc` interrompe de forma cooperativa; estado final nunca é "sucesso".
+- [ ] `Esc` (TUI) / `Ctrl+C` (CLI) interrompe de forma cooperativa; estado final nunca é "sucesso".
 - [ ] `deep_search` respeita `MAX_DEEP_SEARCHES` e o relatório fica no disco.
 - [ ] Uma sessão que usa `web_search` → `web_fetch` → resposta direta
       funciona sem acionar `deep_search`; os orçamentos de web são

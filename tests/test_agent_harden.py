@@ -169,10 +169,11 @@ def test_credenciais_nao_aparecem_em_artefatos(tmp_path):
 
 
 # --------------------------------------------------------------------------
-# CLI: `formiga agent` abre a TUI; `--print` segue headless.
+# CLI: `formiga agent` abre CLI interativa; `--tui` abre TUI; `--print` headless.
 
 
-def test_cli_sem_print_abre_tui(tmp_path, monkeypatch):
+def test_cli_flag_tui_abre_app(tmp_path, monkeypatch):
+    """`formiga agent --tui` abre a TUI Textual."""
     from formiga.cli import main
 
     aberto = {}
@@ -192,6 +193,7 @@ def test_cli_sem_print_abre_tui(tmp_path, monkeypatch):
         [
             "agent",
             "pergunta pré-preenchida",
+            "--tui",
             "--session-dir",
             str(tmp_path / "sessoes"),
         ]
@@ -234,8 +236,8 @@ def test_cli_print_sem_pergunta_erro(tmp_path):
     assert rc == 2
 
 
-def test_cli_agent_sem_tui_instalada(tmp_path, monkeypatch):
-    """Sem textual, `formiga agent` falha com mensagem clara (não crash)."""
+def test_cli_tui_sem_extra_erro(tmp_path, monkeypatch):
+    """Sem textual, `formiga agent --tui` falha com mensagem clara (não crash)."""
     import builtins
 
     real_import = builtins.__import__
@@ -248,5 +250,5 @@ def test_cli_agent_sem_tui_instalada(tmp_path, monkeypatch):
     monkeypatch.setattr(builtins, "__import__", quebra_textual)
     from formiga.cli import main
 
-    rc = main(["agent", "--session-dir", str(tmp_path / "sessoes")])
+    rc = main(["agent", "--tui", "--session-dir", str(tmp_path / "sessoes")])
     assert rc == 1

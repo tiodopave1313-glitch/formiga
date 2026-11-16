@@ -234,25 +234,34 @@ source = { editable = "." }
 dependencies = [
     { name = "httpx" },
     { name = "pydantic" },
-    { name = "textual" },
     { name = "trafilatura" },
+]
+
+[package.optional-dependencies]
+gui = [
+    { name = "textual" },
 ]
 
 [package.dev-dependencies]
 dev = [
     { name = "pytest-asyncio" },
+    { name = "textual" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "httpx", specifier = ">=0.28" },
     { name = "pydantic", specifier = ">=2.7" },
-    { name = "textual", specifier = ">=8.2.8" },
+    { name = "textual", marker = "extra == 'gui'", specifier = ">=8.2.8" },
     { name = "trafilatura", specifier = ">=2.0" },
 ]
+provides-extras = ["gui"]
 
 [package.metadata.requires-dev]
-dev = [{ name = "pytest-asyncio", specifier = ">=1.5.0" }]
+dev = [
+    { name = "pytest-asyncio", specifier = ">=1.5.0" },
+    { name = "textual", specifier = ">=8.2.8" },
+]
 
 [[package]]
 name = "h11"

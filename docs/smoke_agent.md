@@ -31,10 +31,43 @@ Verificar:
 - [ ] Nenhuma credencial aparece em `messages.json`, `events.jsonl`,
       `transcript.md` ou stdout.
 
-## 2. TUI com tarefa mista (`bash` + `deep_search`)
+## 2. CLI interativa (padrão) com tarefa mista (`bash` + `deep_search`)
 
 ```bash
 formiga agent \
+  "Crie o arquivo prova.txt com 'conteudo-smoke' via bash, confirme com read e, se sobrar orçamento, faça um deep_search sobre 'trafilatura extração de conteúdo'." \
+  --llm-backend openai \
+  --llm-base-url https://integrate.api.nvidia.com/v1 \
+  --model nvidia/nemotron-nano-9b-v2 \
+  --searxng-url http://localhost:8080
+```
+
+Na CLI interativa, verificar (nesta ordem):
+
+- [ ] O prompt `pergunta>` aparece; Enter inicia.
+- [ ] O texto do agente aparece **enquanto é gerado** (stream token a token).
+- [ ] Cada ferramenta aparece em linha **antes** de executar:
+      `⚙ bash — command=echo …`, `⚙ read — path=prova.txt`, seguidas de
+      duração (`(1.2 s)`); o progresso do `deep_search` aparece como linhas
+      `· planejado · buscas · síntese`.
+- [ ] A linha de orçamento reflete o loop real: `turnos n/24 · llm n/120`
+      aparece entre turnos.
+- [ ] `Ctrl+C` **durante a resposta** interrompe só o turno atual (parcial salva,
+      `— interrompido pelo usuário —` no transcript, volta ao prompt).
+- [ ] `Ctrl+C` **no prompt** sai do programa limpo.
+- [ ] `Ctrl+D` (EOF) no prompt sai apontando o `transcript.md`.
+- [ ] Com `NO_COLOR=1 formiga agent …`, tudo permanece legível.
+- [ ] O relatório do `deep_search` fica em
+      `sessoes/<sessão>/research/<run>/report.md`.
+- [ ] Ao sair (`Ctrl+D`), abrir `sessoes/<sessão>/transcript.md`: ele contém
+      a mesma conversa exibida (perguntas, texto do agent, tools, durações,
+      interrupções) — copiável de qualquer editor.
+
+## 3. TUI Textual (opcional, `--tui`, requer `formiga[gui]`)
+
+```bash
+uv add --extra gui formiga
+formiga agent --tui \
   "Crie o arquivo prova.txt com 'conteudo-smoke' via bash, confirme com read e, se sobrar orçamento, faça um deep_search sobre 'trafilatura extração de conteúdo'." \
   --llm-backend openai \
   --llm-base-url https://integrate.api.nvidia.com/v1 \
@@ -61,14 +94,14 @@ Na TUI, verificar (nesta ordem):
       "Interrompido pelo usuário…" e o transcript mostra
       `— interrompido pelo usuário —`.
 - [ ] `Ctrl+L` alterna rolagem livre; `Ctrl+Q` sai sem perder a sessão.
-- [ ] Com `NO_COLOR=1 formiga agent …`, tudo permanece legível.
+- [ ] Com `NO_COLOR=1 formiga agent --tui …`, tudo permanece legível.
 - [ ] O relatório do `deep_search` fica em
       `sessoes/<sessão>/research/<run>/report.md`.
 - [ ] Ao sair (`Ctrl+Q`), abrir `sessoes/<sessão>/transcript.md`: ele contém
       a mesma conversa exibida (perguntas, texto do agent, tools, durações,
       interrupções) — copiável de qualquer editor.
 
-## 3. Guardrails com modelo pequeno
+## 4. Guardrails com modelo pequeno
 
 Repetir uma instrução que induza loop (ex.: "liste `.` com ls cinco vezes"):
 
@@ -82,10 +115,10 @@ Esgotar orçamento de web (configurar `agent_max_web_searches = 1` no
 - [ ] A 2ª `web_search` não executa; o modelo recebe `ERRO: orçamento de
       web_search esgotado (1 por mensagem)` e responde com o que tem.
 
-## 4. Anti-regressão rápida
+## 5. Anti-regressão rápida
 
 ```bash
-uv run pytest          # 300+ testes offline, sem rede nem modelo
+uv run pytest          # 320+ testes offline, sem rede nem modelo
 uv run ruff check src/ tests/
 ```
 

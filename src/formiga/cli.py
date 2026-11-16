@@ -12,6 +12,7 @@ from formiga.agent.session import Session
 from formiga.config import Config, ConfigError
 from formiga.configfile import load_file_values
 from formiga.envfile import load_env_file
+from formiga.llm import LLMError
 from formiga.orchestrator import run_research
 from formiga.storage import OutputDirExists, StorageError
 
@@ -150,7 +151,7 @@ def build_parser() -> argparse.ArgumentParser:
     research.add_argument("--verbose", action="store_true", help="Eventos operacionais adicionais.")
 
     agent = sub.add_parser(
-        "agent", help="Executa o harness agêntico (TUI ou modo headless --print)."
+        "agent", help="Executa o harness agêntico (CLI interativa, --tui ou --print)."
     )
     agent.add_argument("question", nargs="?", default=None, help="Pergunta a executar.")
     agent.add_argument(
@@ -158,6 +159,12 @@ def build_parser() -> argparse.ArgumentParser:
         dest="print_mode",
         action="store_true",
         help="Modo headless: imprime a resposta final no stdout.",
+    )
+    agent.add_argument(
+        "--tui",
+        dest="tui_mode",
+        action="store_true",
+        help="Abre a TUI Textual (requer extra: uv add --extra gui formiga).",
     )
     agent.add_argument(
         "--session-dir",
@@ -239,40 +246,145 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Erro de configuração: {exc}", file=sys.stderr)
             return EXIT_INVALID_INPUT
 
+        session = Session(base_dir=args.session_dir or Path("sessoes"))
+
+        if args.print_mode:
+            return _run_print(config, session, args)
+        if args.tui_mode:
+            return _run_tui(config, session, args)
+
+        return _run_interactive(config, session, args)
+
+
+def _run_print(config: Config, session: Session, args) -> int:
+    """Modo headless --print: uma pergunta, uma resposta."""
+    if not args.question or not args.question.strip():
+        print("Erro: a pergunta é obrigatória em modo --print.", file=sys.stderr)
+        return EXIT_INVALID_INPUT
+
+    loop = build_agent(config, session)
+    interrupted = {"flag": False}
+
+    def on_event(event: str, data: dict) -> None:
+        if event == "interrupted":
+            interrupted["flag"] = True
+
+    loop.on_event = on_event
+    answer = loop.run(args.question)
+    print(answer)
+    return EXIT_INTERRUPTED if interrupted["flag"] else EXIT_OK
+
+
+def _run_tui(config: Config, session: Session, args) -> int:
+    """TUI Textual via --tui (requer extra gui)."""
+    try:
+        from formiga.agent.tui import AgentApp
+    except ImportError as exc:
+        print(
+            f"Erro: a TUI requer o extra 'gui' (uv add --extra gui formiga). "
+            f"Detalhes: {exc}",
+            file=sys.stderr,
+        )
+        return EXIT_OPERATIONAL_FAILURE
+
+    app = AgentApp(config, session, initial_question=args.question)
+    try:
+        app.run()
+    except KeyboardInterrupt:
+        return EXIT_INTERRUPTED
+    return EXIT_OK
+
+
+def _run_interactive(config: Config, session: Session, args) -> int:
+    """CLI interativa padrão: loop de perguntas com streaming e ferramentas."""
+    loop = build_agent(config, session)
+
+    transcript_path = session.transcript_path
+    print(f"formiga agent · sessão: {session.dir}")
+    print(f"transcript: {transcript_path} · Ctrl+C interrompe a resposta · Ctrl+D sai")
+
+    # Se args.question veio, roda uma vez antes de entrar no prompt
+    if args.question and args.question.strip():
         try:
-            session = Session(
-                base_dir=args.session_dir or Path("sessoes"),
-            )
-            loop = build_agent(config, session)
-            if args.print_mode:
-                if not args.question or not args.question.strip():
-                    print("Erro: a pergunta é obrigatória em modo --print.", file=sys.stderr)
-                    return EXIT_INVALID_INPUT
-                answer = loop.run(args.question)
-                print(answer)
-                return EXIT_OK
-            # TUI interativa (fase 3): import preguiçoso para manter a CLI leve.
-            try:
-                from formiga.agent.tui import AgentApp
-            except ImportError as exc:  # textual não instalado
-                print(
-                    f"Erro: a TUI requer o pacote 'textual' ({exc}). "
-                    "Use --print para o modo headless.",
-                    file=sys.stderr,
-                )
-                return EXIT_OPERATIONAL_FAILURE
-            app = AgentApp(config, session, initial_question=args.question)
-            app.run()
+            loop.run(args.question)
+        except LLMError as exc:
+            print(f"\n✗ erro: {exc}")
+        except KeyboardInterrupt:
+            pass  # parcial já gravada pelo loop
+
+    budget_snapshot: dict = {}
+
+    def on_event(event: str, data: dict) -> None:
+        nonlocal budget_snapshot
+        if event == "stream":
+            sys.stdout.write(data.get("text", ""))
+            sys.stdout.flush()
+        elif event == "tool_start":
+            # garante quebra de linha antes da linha de tool
+            sys.stdout.write(f"\n⚙ {data.get('tool')} — {data.get('args', '')}")
+            sys.stdout.flush()
+        elif event == "tool_end":
+            if data.get("budget_exhausted"):
+                sys.stdout.write(f"  (⚙ {data.get('tool')} — orçamento esgotado)")
+            elif not data.get("ok", True):
+                seconds = data.get("seconds")
+                dur = f" ({seconds:.1f} s)" if isinstance(seconds, (int, float)) else ""
+                sys.stdout.write(f"  ✗ erro{dur}")
+            else:
+                seconds = data.get("seconds")
+                if isinstance(seconds, (int, float)):
+                    sys.stdout.write(f"  ({seconds:.1f} s)")
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+        elif event == "deep_search_progress":
+            sys.stdout.write(f"· {data.get('message', '')}\n")
+            sys.stdout.flush()
+        elif event == "budget":
+            budget_snapshot = data
+        elif event == "run_final" and not data.get("streamed"):
+            # resposta parcial (orçamento/interrupção) já impressa via stream
+            # imprime linha de orçamento
+            if budget_snapshot:
+                t = budget_snapshot.get("turns", 0)
+                mt = budget_snapshot.get("max_turns", 0)
+                lc = budget_snapshot.get("llm_calls", 0)
+                mlc = budget_snapshot.get("max_llm_calls", 0)
+                sys.stdout.write(f"\nturnos {t}/{mt} · llm {lc}/{mlc}\n")
+                sys.stdout.flush()
+        elif event == "interrupted":
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+
+    loop.on_event = on_event
+
+    while True:
+        try:
+            q = input("\npergunta> ")
+        except EOFError:
+            print(f"\nSaindo. Sessão salva em {transcript_path}")
             return EXIT_OK
         except KeyboardInterrupt:
-            print("Interrompido pelo usuário.", file=sys.stderr)
-            return EXIT_INTERRUPTED
-        except Exception as exc:  # noqa: BLE001
-            print(f"Falha operacional: {exc}", file=sys.stderr)
-            return EXIT_OPERATIONAL_FAILURE
+            print()
+            return EXIT_OK
 
-    parser.error(f"Comando desconhecido: {args.command}")
-    return EXIT_INVALID_INPUT
+        if not q.strip():
+            continue
+
+        try:
+            loop.run(q)
+            # imprime linha de orçamento após cada turno completo
+            b = loop._budget_snapshot()
+            t = b.get("turns", 0)
+            mt = b.get("max_turns", 0)
+            lc = b.get("llm_calls", 0)
+            mlc = b.get("max_llm_calls", 0)
+            sys.stdout.write(f"\nturnos {t}/{mt} · llm {lc}/{mlc}\n")
+            sys.stdout.flush()
+        except LLMError as exc:
+            print(f"\n✗ erro: {exc}")
+            continue
+        except KeyboardInterrupt:
+            continue  # loop trata internamente; volta ao prompt
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -212,7 +212,7 @@ class AgentLoop:
                     max_tokens=self._max_tokens(),
                     on_delta=self._on_delta,
                 )
-            except AgentCancelled:
+            except (AgentCancelled, KeyboardInterrupt):
                 return self._final_interrupted()
             except LLMError as exc:
                 # Falha do modelo (HTTP 4xx/5xx, timeout, parse): desfaz o
@@ -230,7 +230,10 @@ class AgentLoop:
 
             if response.tool_calls:
                 tool_call = response.tool_calls[0]  # uma por iteração (MVP)
-                context = self._handle_tool_call(response)
+                try:
+                    context = self._handle_tool_call(response)
+                except KeyboardInterrupt:
+                    return self._final_interrupted()
                 # registra assistant + resultado da ferramenta no histórico,
                 # no formato wire OpenAI (aceito pelos 3 backends):
                 # `type`/`function` em tool_calls e `role: "tool"` com
