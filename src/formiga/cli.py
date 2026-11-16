@@ -7,13 +7,8 @@ import sys
 from pathlib import Path
 
 from formiga import __version__
-from formiga.agent.chat import build_chat_client
-from formiga.agent.loop import AgentLoop
+from formiga.agent.factory import build_agent
 from formiga.agent.session import Session
-from formiga.agent.tools import FILE_TOOLS
-from formiga.agent.tools.deepsearch import DeepSearchTool
-from formiga.agent.tools.shell import BashTool
-from formiga.agent.tools.web import WebFetchTool, WebSearchTool
 from formiga.config import Config, ConfigError
 from formiga.configfile import load_file_values
 from formiga.envfile import load_env_file
@@ -248,16 +243,7 @@ def main(argv: list[str] | None = None) -> int:
             session = Session(
                 base_dir=args.session_dir or Path("sessoes"),
             )
-            chat_client = build_chat_client(config)
-            workdir = Path(config.agent_workdir)
-            tools = [
-                BashTool(workdir),
-                WebSearchTool(config),
-                WebFetchTool(config),
-                DeepSearchTool(config, session.research_dir),
-                *FILE_TOOLS,
-            ]
-            loop = AgentLoop(chat_client, tools, session, config)
+            loop = build_agent(config, session)
             if args.print_mode:
                 if not args.question or not args.question.strip():
                     print("Erro: a pergunta é obrigatória em modo --print.", file=sys.stderr)
@@ -265,12 +251,19 @@ def main(argv: list[str] | None = None) -> int:
                 answer = loop.run(args.question)
                 print(answer)
                 return EXIT_OK
-            # TUI interativa (fase 3): ainda não implementada.
-            print(
-                "Erro: a TUI interativa ainda não foi implementada. Use --print.",
-                file=sys.stderr,
-            )
-            return EXIT_INVALID_INPUT
+            # TUI interativa (fase 3): import preguiçoso para manter a CLI leve.
+            try:
+                from formiga.agent.tui import AgentApp
+            except ImportError as exc:  # textual não instalado
+                print(
+                    f"Erro: a TUI requer o pacote 'textual' ({exc}). "
+                    "Use --print para o modo headless.",
+                    file=sys.stderr,
+                )
+                return EXIT_OPERATIONAL_FAILURE
+            app = AgentApp(config, session, initial_question=args.question)
+            app.run()
+            return EXIT_OK
         except KeyboardInterrupt:
             print("Interrompido pelo usuário.", file=sys.stderr)
             return EXIT_INTERRUPTED

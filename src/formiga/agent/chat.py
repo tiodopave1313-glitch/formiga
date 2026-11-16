@@ -12,10 +12,25 @@ no MVP (uma tool call por iteração).
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
 from formiga.llm import LLMError
+
+# Callback de streaming: recebe pedaços de texto do `content` do modelo.
+DeltaCallback = Callable[[str], None]
+
+
+class AgentCancelled(Exception):
+    """Usuário pediu interrupção durante o stream — não é falha do LLM.
+
+    Os backends não devem engoli-la (não é `httpx.HTTPError` nem
+    `ValueError`) nem tratá-la como falha de fallback (`LLMError`).
+    """
+
+    def __init__(self) -> None:
+        super().__init__("Execução interrompida pelo usuário.")
 
 
 @dataclass
@@ -32,13 +47,16 @@ class ChatResponse:
     content: str | None = None      # texto do assistente (sem tool call)
     tool_calls: list[ToolCall] | None = None  # chamada(s) de ferramenta
     truncated: bool = False         # terminou por limite de geração
+    deltas: list[str] | None = None  # pedaços roteirizados (fakes de teste)
 
 
 class ChatClient(Protocol):
     """Cliente de modelo com histórico e ferramentas.
 
     `messages` é o histórico acumulado; `tools` são os schemas JSON das
-    ferramentas disponíveis (formato OpenAI/Ollama/llama-server).
+    ferramentas disponíveis (formato OpenAI/Ollama/llama-server). Com
+    `on_delta`, o backend usa streaming e entrega pedaços de texto em tempo
+    real (a resposta final continua completa ao fim da chamada).
     """
 
     def chat(
@@ -46,6 +64,7 @@ class ChatClient(Protocol):
         messages: list[dict],
         tools: list[dict] | None = None,
         max_tokens: int | None = None,
+        on_delta: DeltaCallback | None = None,
     ) -> ChatResponse: ...
 
 
@@ -136,16 +155,17 @@ class FallbackChatClient:
         messages: list[dict],
         tools: list[dict] | None = None,
         max_tokens: int | None = None,
+        on_delta: DeltaCallback | None = None,
     ) -> ChatResponse:
         if self.using_fallback:
-            return self.fallback.chat(messages, tools, max_tokens)
+            return self.fallback.chat(messages, tools, max_tokens, on_delta)
         try:
-            return self.primary.chat(messages, tools, max_tokens)
+            return self.primary.chat(messages, tools, max_tokens, on_delta)
         except LLMError as exc:
             self._consecutive_failures += 1
             if self._consecutive_failures >= self.after_failures:
                 self.using_fallback = True
                 if self.on_fallback is not None:
                     self.on_fallback(str(exc))
-                return self.fallback.chat(messages, tools, max_tokens)
+                return self.fallback.chat(messages, tools, max_tokens, on_delta)
             raise

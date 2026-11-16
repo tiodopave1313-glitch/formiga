@@ -15,7 +15,11 @@ from formiga.storage import append_event, save_report, save_state
 
 
 class FakeChatClient:
-    """Responde com roteiros scriptados: texto final ou chamada de ferramenta."""
+    """Responde com roteiros scriptados: texto final ou chamada de ferramenta.
+
+    Se a resposta tiver `deltas` (lista de strings), os pedaços são entregues
+    via `on_delta` em ordem; o `content` final continua completo.
+    """
 
     def __init__(self, responses: list[ChatResponse]) -> None:
         self.responses = list(responses)
@@ -26,11 +30,21 @@ class FakeChatClient:
         messages: list[dict],
         tools: list[dict] | None = None,
         max_tokens: int | None = None,
+        on_delta=None,
     ) -> ChatResponse:
         self.calls.append((messages, tools, max_tokens))
         if not self.responses:
             raise AssertionError("FakeChatClient sem respostas restantes")
-        return self.responses.pop(0)
+        response = self.responses.pop(0)
+        if on_delta is not None:
+            # Backends reais sempre entregam o content via on_delta; nos fakes,
+            # usa os deltas roteirizados ou o content inteiro como um pedaço.
+            deltas = response.deltas
+            if deltas is None:
+                deltas = [response.content] if response.content else []
+            for piece in deltas:
+                on_delta(piece)
+        return response
 
 
 def tool_call(name: str, arguments: str, call_id: str = "call_1") -> ToolCall:

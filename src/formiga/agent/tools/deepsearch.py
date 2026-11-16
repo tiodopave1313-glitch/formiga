@@ -57,6 +57,9 @@ class DeepSearchTool:
         self.research_dir = research_dir
         self.research_dir.mkdir(parents=True, exist_ok=True)
         self.run_fn = run_fn or run_research
+        # Atribuído pelo loop antes de cada execute; reexposição do progresso
+        # do motor como eventos para a TUI (PRD §6.1).
+        self.on_event = None
 
     def schema(self) -> dict:
         return {
@@ -90,6 +93,8 @@ class DeepSearchTool:
 
         def progress(message: str) -> None:
             events.append(message)
+            if self.on_event is not None:
+                self.on_event("deep_search_progress", {"message": message})
 
         try:
             result = self.run_fn(research_config, progress=progress)

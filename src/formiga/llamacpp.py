@@ -12,7 +12,8 @@ from collections.abc import Callable
 
 import httpx
 
-from formiga.agent.chat import ChatResponse, ToolCall
+from formiga.agent.chat import ChatResponse, DeltaCallback, ToolCall
+from formiga.agent.stream import consume_sse_chat_stream
 from formiga.config import Config
 from formiga.llm import LLMError, LLMResponse
 
@@ -110,14 +111,18 @@ class LlamaCppClient:
         messages: list[dict],
         tools: list[dict] | None = None,
         max_tokens: int | None = None,
+        on_delta: DeltaCallback | None = None,
     ) -> ChatResponse:
-        """Chat com histórico e (opcional) chamadas de ferramenta no llama-server."""
+        """Chat com histórico e (opcional) chamadas de ferramenta no llama-server.
+
+        Com `on_delta`, usa streaming SSE (formato OpenAI-compatível).
+        """
         payload: dict = {
             "messages": messages,
             "temperature": self.temperature,
             "top_k": 64,
             "top_p": 0.95,
-            "stream": False,
+            "stream": on_delta is not None,
         }
         if tools:
             payload["tools"] = tools
@@ -132,9 +137,21 @@ class LlamaCppClient:
             with httpx.Client(
                 timeout=self._effective_timeout(), transport=self._transport
             ) as client:
-                response = client.post(f"{self.url}/v1/chat/completions", json=payload)
+                if on_delta is None:
+                    response = client.post(f"{self.url}/v1/chat/completions", json=payload)
+                else:
+                    request = client.build_request(
+                        "POST", f"{self.url}/v1/chat/completions", json=payload
+                    )
+                    response = client.send(request, stream=True)
             response.raise_for_status()
-            data = response.json()
+            if on_delta is None:
+                data = response.json()
+            else:
+                try:
+                    return consume_sse_chat_stream(response, on_delta, LlamaCppError)
+                finally:
+                    response.close()
         except httpx.HTTPError as exc:
             raise LlamaCppError(f"Falha ao chamar o llama-server: {exc}") from exc
         except ValueError as exc:
