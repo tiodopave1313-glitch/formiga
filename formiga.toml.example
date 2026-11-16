@@ -24,6 +24,9 @@ max_retries = 2
 # Modelos de raciocínio (Nemotron Bolt): thinking ligado por default.
 thinking = true
 
+# Nota: o endpoint do llama-server não tem chave neste arquivo — use
+# FORMIGA_LLAMACPP_URL (ambiente) ou --llamacpp-url (CLI).
+
 # Backup opt-in: só ativa se você descomentar. Após a primeira falha de
 # transporte do backend principal, o backup assume e permanece pelo resto
 # da execução (circuit breaker).
