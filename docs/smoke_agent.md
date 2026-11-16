@@ -25,9 +25,11 @@ formiga agent --print \
 Verificar:
 
 - [ ] A resposta final cita o backend do arquivo e fundamentos da busca.
-- [ ] A sessão existe em `sessoes/<timestamp>/` com `messages.json` e
-      `events.jsonl` (turnos, `tool_call` com `ok`, durações).
-- [ ] Nenhuma credencial aparece em `messages.json`, `events.jsonl` ou stdout.
+- [ ] A sessão existe em `sessoes/<timestamp>/` com `messages.json`,
+      `events.jsonl` e `transcript.md` (turnos, `tool_call` com `ok`,
+      durações; o transcript contém toda a conversa em Markdown).
+- [ ] Nenhuma credencial aparece em `messages.json`, `events.jsonl`,
+      `transcript.md` ou stdout.
 
 ## 2. TUI com tarefa mista (`bash` + `deep_search`)
 
@@ -62,6 +64,9 @@ Na TUI, verificar (nesta ordem):
 - [ ] Com `NO_COLOR=1 formiga agent …`, tudo permanece legível.
 - [ ] O relatório do `deep_search` fica em
       `sessoes/<sessão>/research/<run>/report.md`.
+- [ ] Ao sair (`Ctrl+Q`), abrir `sessoes/<sessão>/transcript.md`: ele contém
+      a mesma conversa exibida (perguntas, texto do agent, tools, durações,
+      interrupções) — copiável de qualquer editor.
 
 ## 3. Guardrails com modelo pequeno
 

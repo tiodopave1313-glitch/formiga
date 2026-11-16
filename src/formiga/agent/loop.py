@@ -89,6 +89,8 @@ class AgentLoop:
         # Índice do início do turno de tool ainda não confirmado pelo
         # modelo — usado para rollback se a chamada seguinte falhar.
         self._pending_len: int | None = None
+        # Bloco "## Agent" aberto no transcript (fecha antes de tools).
+        self._agent_section = False
 
     # ------------------------------------------------------------------ #
     # Cancelamento cooperativo
@@ -105,7 +107,53 @@ class AgentLoop:
         """Callback de streaming: emite evento e sinaliza cancelamento."""
         if self._cancel.is_set():
             raise AgentCancelled()
-        self.on_event("stream", {"text": piece})
+        self._emit("stream", {"text": piece})
+
+    def _emit(self, event: str, data: dict) -> None:
+        """Emite o evento para a TUI e espelha no transcript.md.
+
+        O transcript grava a mesma sequência que a TUI exibe (PRD §8):
+        perguntas, texto do agent, linhas de ferramenta, progresso,
+        interrupções e respostas parciais — a sessão completa fica em
+        `sessoes/<sessão>/transcript.md`.
+        """
+        if event == "stream":
+            if not self._agent_section:
+                self.session.append_transcript("\n## Agent\n")
+                self._agent_section = True
+            self.session.append_transcript(data.get("text", ""))
+            self.on_event(event, data)
+            return
+        if event == "tool_start":
+            if self._agent_section:  # fecha o bloco do agent antes da tool
+                self.session.append_transcript("\n")
+                self._agent_section = False
+            self.session.append_transcript(
+                f"\n⚙ {data.get('tool')} — {data.get('args', '')}\n"
+            )
+        elif event == "tool_end":
+            if data.get("budget_exhausted"):
+                self.session.append_transcript(
+                    f"  (⚙ {data.get('tool')} — orçamento esgotado)\n"
+                )
+            elif not data.get("ok", True):
+                seconds = data.get("seconds")
+                dur = f" ({seconds:.1f} s)" if isinstance(seconds, (int, float)) else ""
+                self.session.append_transcript(f"  ✗ erro{dur}\n")
+            else:
+                seconds = data.get("seconds")
+                if isinstance(seconds, (int, float)):
+                    self.session.append_transcript(f"  ({seconds:.1f} s)\n")
+        elif event == "deep_search_progress":
+            self.session.append_transcript(f"· {data.get('message', '')}\n")
+        elif event == "interrupted":
+            self.session.append_transcript("\n— interrompido pelo usuário —\n")
+        elif event == "run_final" and not data.get("streamed"):
+            if self._agent_section:
+                self.session.append_transcript("\n")
+                self._agent_section = False
+            self.session.append_transcript(f"\n## Agent\n{data.get('text', '')}\n")
+        self.on_event(event, data)
 
     def _budget_snapshot(self) -> dict:
         return {
@@ -141,8 +189,10 @@ class AgentLoop:
 
         self.messages.append({"role": "user", "content": question})
         self.session.save_messages(self.messages)
+        self._agent_section = False
+        self.session.append_transcript(f"\n## Você\n{question}\n")
         self.session.append_event("turn_started", {"turns": 0})
-        self.on_event("budget", self._budget_snapshot())
+        self._emit("budget", self._budget_snapshot())
 
         while True:
             if self._cancel.is_set():
@@ -154,7 +204,7 @@ class AgentLoop:
 
             # chama o modelo com histórico + schemas das ferramentas
             self.budget.record_llm_call()
-            self.on_event("llm_call", {"turns": self.budget.turns_used})
+            self._emit("llm_call", {"turns": self.budget.turns_used})
             try:
                 response: ChatResponse = self.chat.chat(
                     self.messages,
@@ -172,6 +222,7 @@ class AgentLoop:
                 self.session.append_event(
                     "llm_error", {"message": str(exc)[:400]}
                 )
+                self.session.append_transcript(f"  ✗ erro: {str(exc)[:200]}\n")
                 raise
             if self._cancel.is_set():
                 # Cancelamento pedido durante a chamada: resposta descartada.
@@ -208,7 +259,7 @@ class AgentLoop:
                 )
                 self.session.save_messages(self.messages)
                 self.budget.record_turn()
-                self.on_event("budget", self._budget_snapshot())
+                self._emit("budget", self._budget_snapshot())
                 continue
 
             # resposta final sem tool call
@@ -217,8 +268,8 @@ class AgentLoop:
             self.session.save_messages(self.messages)
             self._pending_len = None  # turno confirmado: sem rollback
             self.session.append_event("turn_ended", {"turns": self.budget.turns_used})
-            self.on_event("budget", self._budget_snapshot())
-            self.on_event("run_final", {"text": final, "streamed": True})
+            self._emit("budget", self._budget_snapshot())
+            self._emit("run_final", {"text": final, "streamed": True})
             return final
 
     # ------------------------------------------------------------------ #
@@ -280,7 +331,7 @@ class AgentLoop:
                     "budget_exhausted": True,
                 },
             )
-            self.on_event("tool_end", {"tool": name, "ok": False, "budget_exhausted": True})
+            self._emit("tool_end", {"tool": name, "ok": False, "budget_exhausted": True})
             return budget_err
 
         if self._cancel.is_set():
@@ -288,9 +339,9 @@ class AgentLoop:
 
         # eventos do motor reexpostos pela tool (deep_search)
         if hasattr(tool, "on_event"):
-            tool.on_event = self.on_event
+            tool.on_event = self._emit
 
-        self.on_event("tool_start", {"tool": name, "args": short_args(args)})
+        self._emit("tool_start", {"tool": name, "args": short_args(args)})
         started = monotonic()
         result = tool.execute(**args)
         elapsed = monotonic() - started
@@ -311,7 +362,7 @@ class AgentLoop:
                 "seconds": round(elapsed, 3),
             },
         )
-        self.on_event(
+        self._emit(
             "tool_end",
             {
                 "tool": name,
@@ -335,7 +386,7 @@ class AgentLoop:
         self.session.save_messages(self.messages)
         self._pending_len = None
         self.session.append_event("budget_exhausted", {"reason": reason})
-        self.on_event("run_final", {"text": partial, "streamed": False})
+        self._emit("run_final", {"text": partial, "streamed": False})
         return partial
 
     def _final_interrupted(self) -> str:
@@ -347,6 +398,6 @@ class AgentLoop:
         self.session.save_messages(self.messages)
         self._pending_len = None
         self.session.append_event("interrupted", {"turns": self.budget.turns_used})
-        self.on_event("interrupted", {"turns": self.budget.turns_used})
-        self.on_event("run_final", {"text": partial, "streamed": False})
+        self._emit("interrupted", {"turns": self.budget.turns_used})
+        self._emit("run_final", {"text": partial, "streamed": False})
         return partial
