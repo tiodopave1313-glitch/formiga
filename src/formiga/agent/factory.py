@@ -32,6 +32,6 @@ def build_agent(
         WebSearchTool(config),
         WebFetchTool(config),
         DeepSearchTool(config, session.research_dir),
-        *FILE_TOOLS,
+        *(tool_cls(workdir) for tool_cls in FILE_TOOLS),
     ]
     return AgentLoop(chat_client, tools, session, config, on_event=on_event)
