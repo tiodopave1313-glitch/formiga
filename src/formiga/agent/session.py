@@ -43,6 +43,11 @@ class Session:
     def events_path(self) -> Path:
         return self.dir / "events.jsonl"
 
+    @property
+    def research_dir(self) -> Path:
+        """Diretório `research/` dentro da sessão para saídas de deep_search."""
+        return self.dir / "research"
+
     def save_messages(self, messages: list[dict]) -> None:
         """Salva `messages[]` atomicamente (indented, UTF-8)."""
         payload = json.dumps(messages, ensure_ascii=False, indent=2)

@@ -11,6 +11,9 @@ from formiga.agent.chat import build_chat_client
 from formiga.agent.loop import AgentLoop
 from formiga.agent.session import Session
 from formiga.agent.tools import FILE_TOOLS
+from formiga.agent.tools.deepsearch import DeepSearchTool
+from formiga.agent.tools.shell import BashTool
+from formiga.agent.tools.web import WebFetchTool, WebSearchTool
 from formiga.config import Config, ConfigError
 from formiga.configfile import load_file_values
 from formiga.envfile import load_env_file
@@ -246,7 +249,14 @@ def main(argv: list[str] | None = None) -> int:
                 base_dir=args.session_dir or Path("sessoes"),
             )
             chat_client = build_chat_client(config)
-            tools = [t(Path(config.agent_workdir)) for t in FILE_TOOLS]
+            workdir = Path(config.agent_workdir)
+            tools = [
+                BashTool(workdir),
+                WebSearchTool(config),
+                WebFetchTool(config),
+                DeepSearchTool(config, session.research_dir),
+                *FILE_TOOLS,
+            ]
             loop = AgentLoop(chat_client, tools, session, config)
             if args.print_mode:
                 if not args.question or not args.question.strip():

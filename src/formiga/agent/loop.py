@@ -7,9 +7,15 @@ O loop controla orçamento, guardrails e persistência por turno.
 from __future__ import annotations
 
 from collections.abc import Callable
+from time import monotonic
 
 from formiga.agent.chat import ChatResponse
-from formiga.agent.guardrails import AgentBudget, AntiLoop, ToolResultCap
+from formiga.agent.guardrails import (
+    AgentBudget,
+    AntiLoop,
+    ToolBudgets,
+    ToolResultCap,
+)
 from formiga.agent.parser import parse_tool_call, result_to_context
 from formiga.agent.prompts import SYSTEM_PROMPT
 from formiga.agent.session import Session
@@ -42,17 +48,28 @@ class AgentLoop:
             default_chars=int(getattr(agent_cfg, "agent_tool_result_chars", 4000)),
         )
         self.anti_loop = AntiLoop()
-        self.max_deep_searches = int(getattr(agent_cfg, "agent_max_deep_searches", 2))
-        self.max_web_searches = int(getattr(agent_cfg, "agent_max_web_searches", 6))
-        self.max_web_fetches = int(getattr(agent_cfg, "agent_max_web_fetches", 8))
+        self.tool_budgets = ToolBudgets(
+            max_deep_searches=int(getattr(agent_cfg, "agent_max_deep_searches", 2)),
+            max_web_searches=int(getattr(agent_cfg, "agent_max_web_searches", 6)),
+            max_web_fetches=int(getattr(agent_cfg, "agent_max_web_fetches", 8)),
+        )
 
         self.messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
-        self.deep_searches_used = 0
-        self.web_searches_used = 0
-        self.web_fetches_used = 0
 
     def run(self, question: str) -> str:
-        """Executa o loop até resposta final, orçamento esgotado ou interrupção."""
+        """Executa o loop até resposta final, orçamento esgotado ou interrupção.
+
+        Cada chamada a `run` é uma nova mensagem do usuário: os orçamentos de
+        ferramentas web são reiniciados (seção 7 do PRD).
+        """
+        # Reinicia orçamentos de tools web por mensagem do usuário.
+        self.tool_budgets = ToolBudgets(
+            max_deep_searches=self.tool_budgets.max_deep_searches,
+            max_web_searches=self.tool_budgets.max_web_searches,
+            max_web_fetches=self.tool_budgets.max_web_fetches,
+        )
+        self.anti_loop = AntiLoop()
+
         self.messages.append({"role": "user", "content": question})
         self.session.save_messages(self.messages)
         self.session.append_event("turn_started", {"turns": 0})
@@ -105,14 +122,63 @@ class AgentLoop:
                                 + "\nResultado não útil; tente outro caminho ou responda."
                             )
                         else:
-                            result = tool.execute(**args)
-                            # cap de resultado
-                            cap = self.tool_cap.cap_for(name)
-                            text = result.text
-                            if len(text) > cap:
-                                text = text[:cap] + f"\n…(truncado a {cap} chars)"
-                            result.text = text
-                            context = result_to_context(result)
+                            # orçamento da tool (web/deep_search); outras tools
+                            # não têm orçamento próprio por mensagem.
+                            if name in ("deep_search", "web_search", "web_fetch"):
+                                budget_err = self.tool_budgets.consume(name)
+                                if budget_err is not None:
+                                    context = budget_err
+                                    self.session.append_event(
+                                        "tool_call",
+                                        {
+                                            "tool": name,
+                                            "args": tool_call.arguments,
+                                            "ok": False,
+                                            "budget_exhausted": True,
+                                        },
+                                    )
+                                else:
+                                    started = monotonic()
+                                    result = tool.execute(**args)
+                                    elapsed = monotonic() - started
+                                    # cap de resultado
+                                    cap = self.tool_cap.cap_for(name)
+                                    text = result.text
+                                    if len(text) > cap:
+                                        text = text[:cap] + f"\n…(truncado a {cap} chars)"
+                                    result.text = text
+                                    context = result_to_context(result)
+
+                                    self.session.append_event(
+                                        "tool_call",
+                                        {
+                                            "tool": name,
+                                            "args": tool_call.arguments,
+                                            "ok": result.ok,
+                                            "seconds": round(elapsed, 3),
+                                        },
+                                    )
+                            else:
+                                started = monotonic()
+                                result = tool.execute(**args)
+                                elapsed = monotonic() - started
+                                # cap de resultado
+                                cap = self.tool_cap.cap_for(name)
+                                text = result.text
+                                if len(text) > cap:
+                                    text = text[:cap] + f"\n…(truncado a {cap} chars)"
+                                result.text = text
+                                context = result_to_context(result)
+
+                                self.session.append_event(
+                                    "tool_call",
+                                    {
+                                        "tool": name,
+                                        "args": tool_call.arguments,
+                                        "ok": result.ok,
+                                        "seconds": round(elapsed, 3),
+                                    },
+                                )
 
                 # registra assistant + resultado da ferramenta no histórico
                 self.messages.append(
@@ -127,14 +193,6 @@ class AgentLoop:
                 )
                 self.messages.append({"role": "user", "content": context})
                 self.session.save_messages(self.messages)
-                self.session.append_event(
-                    "tool_call",
-                    {
-                        "tool": name,
-                        "args": tool_call.arguments,
-                        "ok": context.startswith("ERRO:") is False,
-                    },
-                )
                 self.budget.record_turn()
                 continue
 

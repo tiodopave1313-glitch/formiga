@@ -94,3 +94,57 @@ class AntiLoop:
             f"Você já chamou `{tool_name}` com os mesmos argumentos duas vezes "
             "sem progresso. Tente um caminho/argumento diferente ou responda ao usuário."
         )
+
+
+@dataclass
+class ToolBudgets:
+    """Orçamentos de ferramentas web por mensagem do usuário (seção 7).
+
+    Esgotar um orçamento devolve `ERRO:` orçamental ao modelo — não encerra
+    a sessão. Reinicializado a cada nova mensagem (`AgentLoop.run`).
+    """
+
+    max_deep_searches: int = 2
+    max_web_searches: int = 6
+    max_web_fetches: int = 8
+
+    deep_searches_used: int = 0
+    web_searches_used: int = 0
+    web_fetches_used: int = 0
+
+    def consume(self, resource: str) -> str | None:
+        """Consome uma unidade do orçamento. Retorna `ERRO:` se esgotado."""
+        if resource == "deep_search":
+            if self.deep_searches_used >= self.max_deep_searches:
+                return (
+                    f"ERRO: orçamento de deep_search esgotado "
+                    f"({self.max_deep_searches} por mensagem)."
+                )
+            self.deep_searches_used += 1
+        elif resource == "web_search":
+            if self.web_searches_used >= self.max_web_searches:
+                return (
+                    f"ERRO: orçamento de web_search esgotado "
+                    f"({self.max_web_searches} por mensagem)."
+                )
+            self.web_searches_used += 1
+        elif resource == "web_fetch":
+            if self.web_fetches_used >= self.max_web_fetches:
+                return (
+                    f"ERRO: orçamento de web_fetch esgotado "
+                    f"({self.max_web_fetches} por mensagem)."
+                )
+            self.web_fetches_used += 1
+        else:
+            raise ValueError(f"Recurso desconhecido: {resource}")
+        return None
+
+    def remaining(self, resource: str) -> int:
+        if resource == "deep_search":
+            return max(0, self.max_deep_searches - self.deep_searches_used)
+        if resource == "web_search":
+            return max(0, self.max_web_searches - self.web_searches_used)
+        if resource == "web_fetch":
+            return max(0, self.max_web_fetches - self.web_fetches_used)
+        raise ValueError(f"Recurso desconhecido: {resource}")
+
