@@ -125,5 +125,5 @@ def test_smoke_orcamento_web_respeitado_na_tarefa_mista(tmp_path):
     assert loop.tool_budgets.web_searches_used == 1
     # o 2º web_search não executou; o contexto orçamental foi ao modelo
     segunda = chat.calls[1][0]
-    ultimas = [m["content"] for m in segunda if m["role"] == "user"]
+    ultimas = [m["content"] for m in segunda if m["role"] == "tool"]
     assert any("orçamento de web_search esgotado" in m for m in ultimas)

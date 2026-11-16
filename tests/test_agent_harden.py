@@ -53,7 +53,7 @@ def test_anti_loop_nudge_em_2_chamadas_iguais_via_loop(tmp_path):
     assert "Resolvi com caminho diferente" in resposta
     # o nudge (2ª chamada) chegou ao modelo como contexto de ferramenta
     segunda_chamada = chat.calls[1][0]
-    mensagens = [m["content"] for m in segunda_chamada if m["role"] == "user"]
+    mensagens = [m["content"] for m in segunda_chamada if m["role"] == "tool"]
     assert any("mesmos argumentos" in m for m in mensagens)
 
 
@@ -79,7 +79,7 @@ def test_web_fetch_orcamento_esgotado_retorna_erro_orcamental(tmp_path):
     assert any("budget_exhausted" in linha for linha in eventos.splitlines())
     # o modelo recebeu o erro orçamental como contexto
     segunda = chat.calls[1][0]
-    ultimas = [m["content"] for m in segunda if m["role"] == "user"]
+    ultimas = [m["content"] for m in segunda if m["role"] == "tool"]
     assert any("orçamento de web_fetch esgotado" in m for m in ultimas)
 
 

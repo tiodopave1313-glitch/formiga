@@ -33,6 +33,7 @@ from formiga.agent.prompts import SYSTEM_PROMPT
 from formiga.agent.session import Session
 from formiga.agent.tools.base import Tool
 from formiga.config import Config
+from formiga.llm import LLMError
 
 # Tools com orçamento próprio por mensagem do usuário.
 BUDGETED_TOOLS = ("deep_search", "web_search", "web_fetch")
@@ -85,6 +86,10 @@ class AgentLoop:
 
         self.messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
 
+        # Índice do início do turno de tool ainda não confirmado pelo
+        # modelo — usado para rollback se a chamada seguinte falhar.
+        self._pending_len: int | None = None
+
     # ------------------------------------------------------------------ #
     # Cancelamento cooperativo
 
@@ -132,6 +137,7 @@ class AgentLoop:
             max_web_fetches=self.tool_budgets.max_web_fetches,
         )
         self.anti_loop = AntiLoop()
+        self._pending_len = None  # nenhum turno de tool pendente
 
         self.messages.append({"role": "user", "content": question})
         self.session.save_messages(self.messages)
@@ -158,24 +164,48 @@ class AgentLoop:
                 )
             except AgentCancelled:
                 return self._final_interrupted()
+            except LLMError as exc:
+                # Falha do modelo (HTTP 4xx/5xx, timeout, parse): desfaz o
+                # turno incompleto para não envenenar o histórico — senão
+                # toda chamada seguinte falharia de novo com o mesmo erro.
+                self._rollback_pending()
+                self.session.append_event(
+                    "llm_error", {"message": str(exc)[:400]}
+                )
+                raise
             if self._cancel.is_set():
                 # Cancelamento pedido durante a chamada: resposta descartada.
                 return self._final_interrupted()
 
             if response.tool_calls:
+                tool_call = response.tool_calls[0]  # uma por iteração (MVP)
                 context = self._handle_tool_call(response)
-                # registra assistant + resultado da ferramenta no histórico
+                # registra assistant + resultado da ferramenta no histórico,
+                # no formato wire OpenAI (aceito pelos 3 backends):
+                # `type`/`function` em tool_calls e `role: "tool"` com
+                # `tool_call_id` no resultado.
+                self._pending_len = len(self.messages)
                 self.messages.append(
                     {
                         "role": "assistant",
                         "content": response.content or "",
                         "tool_calls": [
-                            {"id": tc.id, "name": tc.name, "arguments": tc.arguments}
+                            {
+                                "id": tc.id,
+                                "type": "function",
+                                "function": {"name": tc.name, "arguments": tc.arguments},
+                            }
                             for tc in response.tool_calls
                         ],
                     }
                 )
-                self.messages.append({"role": "user", "content": context})
+                self.messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "content": context,
+                    }
+                )
                 self.session.save_messages(self.messages)
                 self.budget.record_turn()
                 self.on_event("budget", self._budget_snapshot())
@@ -185,12 +215,26 @@ class AgentLoop:
             final = response.content or "(sem resposta)"
             self.messages.append({"role": "assistant", "content": final})
             self.session.save_messages(self.messages)
+            self._pending_len = None  # turno confirmado: sem rollback
             self.session.append_event("turn_ended", {"turns": self.budget.turns_used})
             self.on_event("budget", self._budget_snapshot())
             self.on_event("run_final", {"text": final, "streamed": True})
             return final
 
     # ------------------------------------------------------------------ #
+
+    def _rollback_pending(self) -> None:
+        """Desfaz o turno de tool pendente (assistant tool_calls + resultado).
+
+        A tool já executou e seus eventos ficam no disco; o rollback remove
+        apenas as mensagens não confirmadas, para o próximo run recomeçar
+        com histórico válido.
+        """
+        if self._pending_len is None:
+            return
+        del self.messages[self._pending_len:]
+        self._pending_len = None
+        self.session.save_messages(self.messages)
 
     def _handle_tool_call(self, response: ChatResponse) -> str:
         """Parser, guardrails, orçamento e execução da tool — devolve contexto."""
@@ -289,6 +333,7 @@ class AgentLoop:
         )
         self.messages.append({"role": "assistant", "content": partial})
         self.session.save_messages(self.messages)
+        self._pending_len = None
         self.session.append_event("budget_exhausted", {"reason": reason})
         self.on_event("run_final", {"text": partial, "streamed": False})
         return partial
@@ -300,6 +345,7 @@ class AgentLoop:
         )
         self.messages.append({"role": "assistant", "content": partial})
         self.session.save_messages(self.messages)
+        self._pending_len = None
         self.session.append_event("interrupted", {"turns": self.budget.turns_used})
         self.on_event("interrupted", {"turns": self.budget.turns_used})
         self.on_event("run_final", {"text": partial, "streamed": False})
