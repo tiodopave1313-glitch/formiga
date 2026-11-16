@@ -391,6 +391,14 @@ class TestConfigFields:
         config = Config.from_env({"FORMIGA_FALLBACK_BACKEND": "llamacpp"})
         assert config.fallback_backend == "llamacpp"
 
+    def test_env_fallback_after_failures(self):
+        config = Config.from_env({"FORMIGA_FALLBACK_AFTER_FAILURES": "3"})
+        assert config.fallback_after_failures == 3
+        with pytest.raises(ConfigError):
+            Config.from_env({"FORMIGA_FALLBACK_AFTER_FAILURES": "muito"})
+        with pytest.raises(ConfigError):
+            Config.from_env({"FORMIGA_FALLBACK_AFTER_FAILURES": "0"})
+
     def test_cli_beats_env_for_openai_url(self):
         config = Config.from_env({"FORMIGA_OPENAI_URL": "https://env/v1"}).apply_args(
             type("Args", (), {"openai_url": "https://cli/v1"})

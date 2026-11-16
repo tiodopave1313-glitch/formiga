@@ -44,6 +44,7 @@ ENV_LLM_THINKING = "FORMIGA_LLM_THINKING"
 ENV_OPENAI_URL = "FORMIGA_OPENAI_URL"
 ENV_OPENAI_API_KEY_ENV = "FORMIGA_OPENAI_API_KEY_ENV"
 ENV_FALLBACK_BACKEND = "FORMIGA_FALLBACK_BACKEND"
+ENV_FALLBACK_AFTER_FAILURES = "FORMIGA_FALLBACK_AFTER_FAILURES"
 
 LLM_BACKENDS = ("ollama", "llamacpp", "openai")
 DEFAULT_LLM_BACKEND = "ollama"
@@ -172,6 +173,16 @@ class Config:
             config = replace(config, openai_api_key_env=api_key_env)
         if (fallback := _env(env, ENV_FALLBACK_BACKEND)) is not None:
             config = replace(config, fallback_backend=fallback)
+        if (failures := _env(env, ENV_FALLBACK_AFTER_FAILURES)) is not None:
+            try:
+                config = replace(
+                    config, fallback_after_failures=int(failures)
+                )
+            except ValueError as exc:
+                raise ConfigError(
+                    "FORMIGA_FALLBACK_AFTER_FAILURES não é um inteiro: "
+                    f"{failures!r}."
+                ) from exc
         if (llm_timeout := _env(env, ENV_LLM_TIMEOUT)) is not None:
             try:
                 config = replace(config, llm_timeout=float(llm_timeout))

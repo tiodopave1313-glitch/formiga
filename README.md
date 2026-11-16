@@ -8,9 +8,10 @@ produz uma resposta em Markdown com referências e limitações.
 > delimitam o que pode ser afirmado.**
 
 O sistema não depende de um agente autônomo com ferramentas livres: o fluxo é
-controlado pelo programa e o LLM (8B, via Ollama) executa tarefas pequenas e
-delimitadas — planejar, formular consulta, extrair citações, verificar,
-comparar, sintetizar e auditar.
+controlado pelo programa e o LLM (default: Nemotron 3.5 Bolt E4B, 8B totais —
+Ollama, llama.cpp ou endpoint remoto OpenAI-compatível) executa tarefas
+pequenas e delimitadas — planejar, formular consulta, extrair citações,
+verificar, comparar, sintetizar e auditar.
 
 ## Instalação
 
@@ -135,6 +136,7 @@ FORMIGA_LLAMACPP_URL=http://localhost:8080   # endpoint do llama-server
 FORMIGA_OPENAI_URL=https://integrate.api.nvidia.com/v1   # backend remoto
 FORMIGA_OPENAI_API_KEY_ENV=NVIDIA_API_KEY
 FORMIGA_FALLBACK_BACKEND=           # backup opt-in: ollama | llamacpp | openai
+FORMIGA_FALLBACK_AFTER_FAILURES=1   # falhas consecutivas antes do backup assumir
 FORMIGA_LLM_TIMEOUT=300             # timeout por chamada ao modelo (segundos)
 FORMIGA_LLM_TEMPERATURE=1.0         # temperatura de amostragem (ficha do modelo)
 FORMIGA_LLM_THINKING=1              # 0 = desligar o raciocínio (default: 1)
@@ -188,12 +190,23 @@ registrada como evento `llm_fallback` em `events.jsonl`; o timeout do backup
 respeita o tempo restante da execução. Exemplo: API remota como principal e
 Ollama local como backup.
 
+### llama.cpp local (llama-server)
+
 Para usar um `llama-server` compilado localmente:
 
 ```bash
 .venv/bin/formiga research "..." \
   --llm-backend llamacpp --llamacpp-url http://127.0.0.1:9931 \
   --output ./pesquisa-formiga
+```
+
+Receita recomendada para o Nemotron 3.5 Bolt (thinking com orçamento de
+raciocínio controlado no servidor):
+
+```bash
+llama-server -m Nemotron-3.5-Bolt-E4B-Q4_K_M.gguf \
+  --alias nemotron-bolt -c 65536 --jinja \
+  --reasoning on --reasoning-budget 512
 ```
 
 Builds antigas do llama-server que não suportam `schema` dentro de
@@ -225,7 +238,7 @@ remota: `nvidia/nemotron-3.5-bolt-e4b`. Detalhes que afetam o Formiga:
 - **Truncamento**: se o raciocínio consumir o teto e o JSON for cortado
   (`finish_reason: "length"`), a segunda tentativa dobra o cap. A resposta
   bruta falha aparece no evento `llm_call` de `events.jsonl`. Blocos
-  `ANNELing ...' inline no `content` são descartados antes do parse.
+  `ANNELing ... ANNELs` inline no `content` são descartados antes do parse.
 
 ## Smoke test manual
 
@@ -239,6 +252,9 @@ formiga research \
   "O que muda na segurança ao migrar de SSH por senha para SSH com chaves?" \
   --output ./smoke-formiga --verbose
 ```
+
+Para testar com o **backend remoto** (sem Ollama local), veja a seção
+"Backend remoto" acima — basta a chave em `.env`/ambiente.
 
 Depois inspecione:
 
@@ -279,6 +295,7 @@ formiga/
 │   ├── cli.py             # argparse, códigos de saída
 │   ├── config.py          # precedência CLI > env > default
 │   ├── configfile.py      # arquivo de config TOML (default < arquivo < env < CLI)
+│   ├── envfile.py         # arquivo .env que só preenche variáveis ausentes
 │   ├── models.py          # schemas de estado (Pydantic)
 │   ├── orchestrator.py    # loop de pesquisa controlado pelo programa
 │   ├── budget.py          # orçamentos verificados antes de cada ação
