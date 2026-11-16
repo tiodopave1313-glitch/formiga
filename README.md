@@ -48,35 +48,103 @@ legível), mas **não são retomadas** no MVP.
 | Opção | Finalidade |
 |---|---|
 | `--output PATH` | Diretório de saída (padrão `./formiga-out`) |
-| `--model NAME` | Nome do modelo no Ollama |
+| `--config PATH` | Arquivo de configuração TOML (default: `./formiga.toml` se existir; ver abaixo) |
+| `--model NAME` | Nome do modelo no Ollama ou ID do modelo no backend remoto (default: `nemotron-3.5-bolt`) |
 | `--ollama-url URL` | Endpoint do Ollama |
 | `--searxng-url URL` | Endpoint da instância SearXNG (JSON habilitado) |
-| `--llm-backend {ollama,llamacpp}` | Backend do modelo (default: ollama) |
+| `--llm-backend {ollama,llamacpp,openai}` | Backend do modelo (default: ollama) |
+| `--llm-base-url URL` | URL base do endpoint remoto OpenAI-compatível (ex.: `https://integrate.api.nvidia.com/v1`) |
+| `--api-key-env NAME` | Nome da variável de ambiente com a chave do endpoint remoto (default: `NVIDIA_API_KEY`) |
+| `--llm-thinking` | Deixar o modelo raciocinar antes do JSON (default: **ligado**; desligue com `--no-llm-thinking`) |
+| `--fallback-backend {ollama,llamacpp,openai}` | Backup **opt-in**: ativa somente após falhas do backend principal (default: sem backup) |
+| `--fallback-after-failures N` | Falhas consecutivas do principal antes do backup assumir (default 1) |
+| `--llm-max-retries N` | Retries HTTP (429/5xx) no backend remoto, com backoff (default 2) |
 | `--llamacpp-url URL` | Endpoint do llama-server (OpenAI-compatível) |
-| `--llamacpp-thinking` | Deixar o modelo raciocinar antes do JSON (default: desligado) |
+| `--llamacpp-thinking` | Deixar o modelo raciocinar antes do JSON (default: **ligado**; desligue com `--no-llamacpp-thinking`) |
 | `--max-searches N` | Limite de buscas (default 12) |
 | `--max-pages N` | Limite de páginas (default 18) |
 | `--max-llm-calls N` | Limite total de chamadas (default 40; 8 reservadas para síntese/auditoria) |
 | `--timeout-seconds N` | Tempo máximo da execução (default 900) |
-| `--llm-timeout-seconds N` | Timeout por chamada ao modelo (default 120; CPU lenta pode exigir mais) |
-| `--llm-temperature T` | Temperatura de amostragem (default 0.2; Gemma 4 recomenda 1.0 para uso geral) |
+| `--llm-timeout-seconds N` | Timeout por chamada ao modelo (default 300; CPU lenta pode exigir mais) |
+| `--llm-temperature T` | Temperatura de amostragem (default 1.0, conforme a ficha do Nemotron 3.5 Bolt; 0.2 pode ajudar em JSON estruturado) |
 | `--overwrite` | Autoriza sobrescrever um diretório de saída existente |
 | `--verbose` | Eventos operacionais no stderr |
 
+## Arquivo de configuração
+
+Além da CLI e das variáveis de ambiente, o Formiga lê um arquivo TOML.
+Precedência: **CLI > variáveis de ambiente > arquivo > defaults**. Sem
+`--config`/`FORMIGA_CONFIG`, ele procura `./formiga.toml` e depois
+`~/.config/formiga/config.toml`. Veja o exemplo completo em
+`formiga.toml.example` (o `formiga.toml` real é ignorado pelo git, pois pode
+conter uma chave de API com permissão `0600`).
+
+```toml
+[llm]
+backend = "openai"                       # ollama | llamacpp | openai
+model = "nvidia/nemotron-3.5-bolt-e4b"
+base_url = "https://integrate.api.nvidia.com/v1"
+api_key_env = "NVIDIA_API_KEY"           # nome da variável, nunca a chave
+temperature = 1.0
+timeout_seconds = 120.0
+max_retries = 2
+thinking = true                          # raciocínio antes do JSON (default)
+# Backup opt-in (nunca automático): descomente para ativar.
+# fallback_backend = "ollama"
+# fallback_after_failures = 1
+
+[search]
+searxng_url = "http://localhost:8080"
+
+[budget]
+max_searches = 12
+max_pages = 18
+max_llm_calls = 40
+timeout_seconds = 900
+```
+
 ## Configuração
 
-Precedência: argumento da CLI > variável de ambiente > valor padrão.
+Precedência: argumento da CLI > variável de ambiente > arquivo TOML > valor padrão.
+
+### Arquivo de segredos (`.env`)
+
+A chave da API fica em um arquivo `.env` no diretório do projeto (ignorado
+pelo git, permissão `0600` exigida). Copie `.env.example` para `.env` e
+preencha:
 
 ```text
-FORMIGA_MODEL=llama3.1:8b
+NVIDIA_API_KEY=nvapi-...
+```
+
+- O `.env` apenas **preenche variáveis ausentes** — o que já estiver definido
+  no ambiente vence (`export NVIDIA_API_KEY=...` sobrepõe o arquivo).
+- Outras variáveis `FORMIGA_*` também podem ir no `.env`.
+- Caminho alternativo: `FORMIGA_ENV_FILE=caminho/para/secrets.env`.
+- A chave nunca aparece em `repr(Config)`, mensagens de erro, `state.json`
+  nem `events.jsonl`.
+
+```text
+FORMIGA_CONFIG=caminho/formiga.toml
+FORMIGA_ENV_FILE=caminho/secrets.env
+FORMIGA_MODEL=nemotron-3.5-bolt
 FORMIGA_OLLAMA_URL=http://localhost:11434
 FORMIGA_SEARXNG_URL=http://localhost:8080
-FORMIGA_LLM_BACKEND=ollama          # ou: llamacpp
+FORMIGA_LLM_BACKEND=ollama          # ou: llamacpp, openai
 FORMIGA_LLAMACPP_URL=http://localhost:8080   # endpoint do llama-server
-FORMIGA_LLM_TIMEOUT=120             # timeout por chamada ao modelo (segundos)
-FORMIGA_LLM_TEMPERATURE=0.2         # temperatura de amostragem
-FORMIGA_LLAMACPP_THINKING=0         # 1 = deixar o modelo raciocinar antes do JSON
+FORMIGA_OPENAI_URL=https://integrate.api.nvidia.com/v1   # backend remoto
+FORMIGA_OPENAI_API_KEY_ENV=NVIDIA_API_KEY
+FORMIGA_FALLBACK_BACKEND=           # backup opt-in: ollama | llamacpp | openai
+FORMIGA_LLM_TIMEOUT=300             # timeout por chamada ao modelo (segundos)
+FORMIGA_LLM_TEMPERATURE=1.0         # temperatura de amostragem (ficha do modelo)
+FORMIGA_LLM_THINKING=1              # 0 = desligar o raciocínio (default: 1)
+FORMIGA_LLAMACPP_THINKING=1         # override do thinking só no llama.cpp
 ```
+
+A chave do backend remoto nunca vai na CLI. Fontes possíveis, em ordem de
+preferência: variável de ambiente definida manualmente, `.env` do projeto
+(nome indicado por `api_key_env` / `--api-key-env`, default
+`NVIDIA_API_KEY`) ou `api_key = "..."` no arquivo TOML com permissão `0600`.
 
 O modelo padrão é uma escolha inicial de implementação, não uma exigência de
 qualidade. Instale-o antes no backend escolhido e configure uma instância
@@ -84,10 +152,41 @@ SearXNG própria com o formato JSON habilitado (`search.formats: [html, json]`).
 
 ### Backends de modelo
 
-| Backend | Endpoint | Formato estruturado |
-|---|---|---|
-| `ollama` (default) | `POST /api/chat` com `format: "json"` | JSON; schema imposto pela validação do harness |
-| `llamacpp` | `POST /v1/chat/completions` (OpenAI-compatível) | `response_format: {"type": "json_object", "schema": ...}` — builds com suporte convertem o schema em gramática GBNF; sem suporte, a validação fica no harness |
+| Backend | Endpoint | Formato estruturado | Thinking |
+|---|---|---|---|
+| `ollama` (default) | `POST /api/chat` com `format: "json"` | JSON; schema imposto pela validação do harness | `think: true` no payload; 400 citando "think" → repete sem o campo |
+| `llamacpp` | `POST /v1/chat/completions` (OpenAI-compatível) | `response_format: {"type": "json_object", "schema": ...}` — builds com suporte convertem o schema em gramática GBNF; sem suporte, a validação fica no harness | `chat_template_kwargs: {"enable_thinking": ...}` explícito |
+| `openai` | `POST {base_url}/chat/completions` com `Authorization: Bearer` | `response_format: {"type": "json_object"}`; se o servidor rejeitar, repete uma vez sem o campo. O schema não é imposto remotamente — a validação fica no harness. Retries (default 2) para 429/5xx com backoff e `Retry-After` | `chat_template_kwargs: {"enable_thinking": true}` + `skip_special_tokens: false`; 400 citando os campos → repete sem eles |
+
+### Backend remoto (NVIDIA NIM, OpenAI, DeepSeek, vLLM...)
+
+O backend `openai` funciona com qualquer endpoint OpenAI-compatível. Exemplo
+com a API da NVIDIA:
+
+```bash
+export NVIDIA_API_KEY=nvapi-...
+formiga research "..." \
+  --llm-backend openai \
+  --llm-base-url https://integrate.api.nvidia.com/v1 \
+  --model nvidia/nemotron-3.5-bolt-e4b \
+  --output ./pesquisa-formiga
+```
+
+Equivalentemente via `formiga.toml` (seção acima) ou `FORMIGA_OPENAI_URL` +
+`FORMIGA_MODEL` + `FORMIGA_LLM_BACKEND=openai`. A URL base pode terminar em
+`/v1` (o cliente acrescenta `/chat/completions`) ou incluir o caminho completo.
+
+### Failover opt-in (backup)
+
+Por padrão **não há failover**: falhas do backend principal degradam a
+execução como sempre. Definindo `fallback_backend` (arquivo, env
+`FORMIGA_FALLBACK_BACKEND` ou `--fallback-backend`), após
+`fallback_after_failures` falhas consecutivas do principal o backup assume e
+**permanece** pelo resto da execução (circuit breaker — evita retestar um
+backend lento a cada chamada e queimar o orçamento de tempo). A migração é
+registrada como evento `llm_fallback` em `events.jsonl`; o timeout do backup
+respeita o tempo restante da execução. Exemplo: API remota como principal e
+Ollama local como backup.
 
 Para usar um `llama-server` compilado localmente:
 
@@ -101,31 +200,39 @@ Builds antigas do llama-server que não suportam `schema` dentro de
 `response_format` também funcionam — o campo é ignorado e a validação fica no
 harness.
 
-### Modelo adotado para o teste inicial: Gemma 4 E2B
+### Modelo adotado como padrão: Nemotron 3.5 Bolt E4B 4GB
 
-O smoke test usa [`google/gemma-4-E2B-it`](https://huggingface.co/google/gemma-4-E2B-it)
-(2,3B de parâmetros efetivos, contexto 128K, suporte nativo a `system` e a
-modelos de raciocínio). Detalhes que afetam o Formiga:
+O default é [`nvidia/NVIDIA-Nemotron-3.5-Bolt-E4B-4GB`](https://huggingface.co/nvidia/NVIDIA-Nemotron-3.5-Bolt-E4B-4GB)
+(8B totais, 4B efetivos, Q4_K_M ~6,2 GB, contexto 64K), post-treinado pela
+NVIDIA sobre a Gemma 4 E4B com RL em ambientes de saída estruturada,
+instruction following e tool use. No Ollama: `nemotron-3.5-bolt`; na NIM
+remota: `nvidia/nemotron-3.5-bolt-e4b`. Detalhes que afetam o Formiga:
 
-- **Thinking**: a Gemma 4 raciocina antes de responder e o raciocínio
-  (`reasoning_content`) consome o teto de geração **antes** do JSON estruturado.
-  Por isso o Formiga envia `chat_template_kwargs: {"enable_thinking": false}`
-  por default ao llama-server. Para deixar o modelo raciocinar (os limites por
-  tarefa recebem folga extra de tokens), use `--llamacpp-thinking` ou
-  `FORMIGA_LLAMACPP_THINKING=1`.
-- **Amostragem**: `top_k=64` e `top_p=0.95` seguem a ficha do modelo; a
-  temperatura é configurável (`--llm-temperature`, default 0.2 para JSON
-  estruturado).
-- **Truncamento**: se o JSON for cortado no limite de geração, a segunda
-  tentativa dobra o teto (`finish_reason: "length"` é detectado). A resposta
-  bruta falha aparece no evento `llm_call` de `events.jsonl`.
+- **Thinking**: o reasoning é controlado pelo chat template
+  (`chat_template_kwargs: {"enable_thinking": true/false}`) e o **default do
+  próprio modelo é ligado** — o Formiga segue esse default e envia o kwarg
+  explicitamente no `llamacpp` e no `openai`, e `think: true` no Ollama.
+  Endpoints que rejeitam o campo recebem uma repetição sem ele. Para desligar
+  (respostas diretas, mais velocidade): `--no-llm-thinking`, `thinking = false`
+  ou `FORMIGA_LLM_THINKING=0`. Com thinking ligado, os caps por tarefa ganham
+  folga extra de tokens e o teto dobrado sobe para 4096.
+- **Orçamento de raciocínio no llama-server**: opcionalmente limite o thinking
+  no servidor com `--reasoning-budget N` (o servidor corta o raciocínio no
+  teto, preservando espaço para o JSON).
+- **Amostragem**: a ficha recomenda **temperature 1.0 e top_p 0.95** nos dois
+  modos — é o default do Formiga (`--llm-temperature` para ajustar; 0.2 pode
+  ajudar em JSON estruturado sem gramática).
+- **Truncamento**: se o raciocínio consumir o teto e o JSON for cortado
+  (`finish_reason: "length"`), a segunda tentativa dobra o cap. A resposta
+  bruta falha aparece no evento `llm_call` de `events.jsonl`. Blocos
+  `ANNELing ...' inline no `content` são descartados antes do parse.
 
 ## Smoke test manual
 
 Com Ollama e SearXNG disponíveis:
 
 ```bash
-ollama pull llama3.1:8b
+ollama pull nemotron-3.5-bolt
 # SearXNG com JSON habilitado, ex.: http://localhost:8080
 
 formiga research \
@@ -143,7 +250,11 @@ Esse teste demonstra integração, **não comprova qualidade factual**.
 
 ## Privacidade
 
-- A pergunta e os trechos de páginas são enviados ao Ollama configurado.
+- A pergunta e os trechos de páginas são enviados ao backend de modelo
+  configurado — **incluindo um provedor remoto** quando `llm_backend` é
+  `openai` (NVIDIA, OpenAI, etc.): saiba que o conteúdo sai da sua máquina.
+- A chave do backend remoto é enviada apenas no header `Authorization` da
+  chamada; nunca aparece em logs, eventos ou relatórios.
 - As consultas geradas são enviadas à instância SearXNG configurada e,
   dependendo da instância, a outros mecanismos de busca.
 - Não inclua dados sensíveis sem confiar nesses serviços.
@@ -167,6 +278,7 @@ formiga/
 ├── src/formiga/
 │   ├── cli.py             # argparse, códigos de saída
 │   ├── config.py          # precedência CLI > env > default
+│   ├── configfile.py      # arquivo de config TOML (default < arquivo < env < CLI)
 │   ├── models.py          # schemas de estado (Pydantic)
 │   ├── orchestrator.py    # loop de pesquisa controlado pelo programa
 │   ├── budget.py          # orçamentos verificados antes de cada ação
@@ -175,6 +287,8 @@ formiga/
 │   ├── schemas.py         # schemas das propostas do modelo
 │   ├── ollama.py          # cliente Ollama
 │   ├── llamacpp.py        # cliente llama-server (OpenAI-compatível)
+│   ├── openai.py          # cliente remoto OpenAI-compatível (NVIDIA, etc.)
+│   ├── fallback.py        # failover opt-in entre backends (circuit breaker)
 │   ├── searxng.py         # cliente SearXNG JSON
 │   ├── fetcher.py         # fetch seguro (seção 13 do PRD)
 │   ├── extract.py         # Trafilatura, trechos, seleção lexical

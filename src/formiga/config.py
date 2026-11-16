@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-DEFAULT_MODEL = "llama3.1:8b"
+DEFAULT_MODEL = "nemotron-3.5-bolt"
 DEFAULT_OLLAMA_URL = "http://localhost:11434"
 DEFAULT_SEARXNG_URL = "http://localhost:8080"
 
@@ -25,9 +25,10 @@ DEFAULT_FORMAT_RETRIES = 1
 DEFAULT_MAX_HTTP_BYTES = 2 * 1024 * 1024
 DEFAULT_NETWORK_TIMEOUT = 20.0
 DEFAULT_LLM_TIMEOUT = 300.0  # geração do modelo em CPU leva dezenas de segundos
-# Gemma 4 recomenda temperature=1.0; para JSON estruturado baixamos por default
-# e deixamos configurável (FORMIGA_LLM_TEMPERATURE / --llm-temperature).
-DEFAULT_LLM_TEMPERATURE = 0.2
+# Nemotron 3.5 Bolt E4B recomenda temperature=1.0 e top_p=0.95 nos dois modos
+# de thinking (ficha do modelo); configurável via
+# FORMIGA_LLM_TEMPERATURE / --llm-temperature (0.2 pode ajudar em JSON).
+DEFAULT_LLM_TEMPERATURE = 1.0
 
 ENV_LLM_TIMEOUT = "FORMIGA_LLM_TIMEOUT"
 ENV_LLM_TEMPERATURE = "FORMIGA_LLM_TEMPERATURE"
@@ -38,15 +39,27 @@ ENV_SEARXNG_URL = "FORMIGA_SEARXNG_URL"
 ENV_LLM_BACKEND = "FORMIGA_LLM_BACKEND"
 ENV_LLAMACPP_URL = "FORMIGA_LLAMACPP_URL"
 ENV_LLAMACPP_THINKING = "FORMIGA_LLAMACPP_THINKING"
+ENV_LLM_THINKING = "FORMIGA_LLM_THINKING"
 
-LLM_BACKENDS = ("ollama", "llamacpp")
+ENV_OPENAI_URL = "FORMIGA_OPENAI_URL"
+ENV_OPENAI_API_KEY_ENV = "FORMIGA_OPENAI_API_KEY_ENV"
+ENV_FALLBACK_BACKEND = "FORMIGA_FALLBACK_BACKEND"
+
+LLM_BACKENDS = ("ollama", "llamacpp", "openai")
 DEFAULT_LLM_BACKEND = "ollama"
 DEFAULT_LLAMACPP_URL = "http://localhost:8080"  # porta default do llama-server
-# Modelos de raciocínio (ex.: Gemma Forge) pensam antes do JSON e podem
-# consumir o teto de geração com `reasoning_content`. Default: desligado,
-# pois os caps por tarefa são pequenos. Modelos sem o kwarg no template
-# podem rejeitar; aí ative o thinking explicitamente.
-DEFAULT_LLAMACPP_THINKING = False
+# Backend remoto OpenAI-compatível (NVIDIA NIM, OpenAI, DeepSeek, vLLM...).
+# Sem default de URL: `openai_url` é obrigatório quando o backend é usado.
+DEFAULT_OPENAI_URL = ""
+DEFAULT_OPENAI_API_KEY_ENV = "NVIDIA_API_KEY"
+# Retries HTTP do backend remoto para 429/5xx, com backoff e Retry-After.
+DEFAULT_MAX_LLM_RETRIES = 2
+# Modelos de raciocínio (ex.: Nemotron 3.5 Bolt E4B) pensam antes do JSON e
+# consomem o teto de geração com `reasoning_content`. Default: ligado — o
+# template do Nemotron Bolt já nasce com thinking ativado e os caps por tarefa
+# recebem folga extra. Desligue (thinking = false / --no-llm-thinking) para
+# respostas diretas e mais velocidade.
+DEFAULT_THINKING = True
 
 
 class ConfigError(ValueError):
@@ -58,6 +71,19 @@ def _env(env: dict[str, str], key: str) -> str | None:
     if value is None or value.strip() == "":
         return None
     return value.strip()
+
+
+def _env_bool(env: dict[str, str], key: str) -> bool | None:
+    """Valor booleano do ambiente; `None` quando ausente, erro se inválido."""
+    raw = _env(env, key)
+    if raw is None:
+        return None
+    lowered = raw.lower()
+    if lowered in ("1", "true", "yes", "on"):
+        return True
+    if lowered in ("0", "false", "no", "off"):
+        return False
+    raise ConfigError(f"{key} não é booleano: {raw!r}.")
 
 
 def _positive_int(name: str, value: int) -> int:
@@ -77,7 +103,19 @@ class Config:
     searxng_url: str = DEFAULT_SEARXNG_URL
     llm_backend: str = DEFAULT_LLM_BACKEND
     llamacpp_url: str = DEFAULT_LLAMACPP_URL
-    llamacpp_thinking: bool = DEFAULT_LLAMACPP_THINKING
+    llamacpp_thinking: bool = DEFAULT_THINKING
+    # Flag genérica de raciocínio (vale para qualquer backend; o OpenAI
+    # remoto recebe o kwarg de template com fallback sem o campo).
+    llm_thinking: bool = DEFAULT_THINKING
+    # Backend remoto OpenAI-compatível.
+    openai_url: str = DEFAULT_OPENAI_URL
+    openai_api_key_env: str = DEFAULT_OPENAI_API_KEY_ENV
+    # Chave lida do arquivo de config (nunca da CLI); não aparece no repr.
+    openai_api_key: str = field(default="", repr=False)
+    # Failover opt-in: sem `fallback_backend`, há apenas o backend principal.
+    fallback_backend: str | None = None
+    fallback_after_failures: int = 1
+    llm_max_retries: int = DEFAULT_MAX_LLM_RETRIES
     verbose: bool = False
     overwrite: bool = False
 
@@ -100,9 +138,20 @@ class Config:
     llm_temperature: float = DEFAULT_LLM_TEMPERATURE
 
     @classmethod
-    def from_env(cls, env: dict[str, str] | None = None) -> Config:
+    def from_sources(
+        cls,
+        env: dict[str, str] | None = None,
+        file_values: dict[str, object] | None = None,
+    ) -> Config:
+        """Configuração a partir dos defaults + arquivo + ambiente.
+
+        Precedência: defaults < `file_values` (formiga.toml) < variáveis de
+        ambiente. A CLI é aplicada depois, via `apply_args`.
+        """
         env = dict(os.environ if env is None else env)
         config = cls()
+        if file_values:
+            config = replace(config, **file_values)
         if (model := _env(env, ENV_MODEL)) is not None:
             config = replace(config, model=model)
         if (ollama := _env(env, ENV_OLLAMA_URL)) is not None:
@@ -113,13 +162,16 @@ class Config:
             config = replace(config, llm_backend=backend)
         if (llamacpp := _env(env, ENV_LLAMACPP_URL)) is not None:
             config = replace(config, llamacpp_url=llamacpp)
-        if (thinking := _env(env, ENV_LLAMACPP_THINKING)) is not None:
-            flag = thinking.lower() in ("1", "true", "yes", "on")
-            if not flag and thinking.lower() not in ("0", "false", "no", "off"):
-                raise ConfigError(
-                    f"FORMIGA_LLAMACPP_THINKING não é booleano: {thinking!r}."
-                )
+        if (flag := _env_bool(env, ENV_LLAMACPP_THINKING)) is not None:
             config = replace(config, llamacpp_thinking=flag)
+        if (flag := _env_bool(env, ENV_LLM_THINKING)) is not None:
+            config = replace(config, llm_thinking=flag)
+        if (openai_url := _env(env, ENV_OPENAI_URL)) is not None:
+            config = replace(config, openai_url=openai_url)
+        if (api_key_env := _env(env, ENV_OPENAI_API_KEY_ENV)) is not None:
+            config = replace(config, openai_api_key_env=api_key_env)
+        if (fallback := _env(env, ENV_FALLBACK_BACKEND)) is not None:
+            config = replace(config, fallback_backend=fallback)
         if (llm_timeout := _env(env, ENV_LLM_TIMEOUT)) is not None:
             try:
                 config = replace(config, llm_timeout=float(llm_timeout))
@@ -134,6 +186,17 @@ class Config:
                 ) from exc
         config.validate()
         return config
+
+    @classmethod
+    def from_env(cls, env: dict[str, str] | None = None) -> Config:
+        return cls.from_sources(env=env)
+
+    def resolve_api_key(self, env: dict[str, str] | None = None) -> str:
+        """Chave do backend remoto: valor do arquivo (0600) ou variável de ambiente."""
+        env = dict(os.environ if env is None else env)
+        if self.openai_api_key:
+            return self.openai_api_key
+        return env.get(self.openai_api_key_env, "").strip()
 
     def apply_args(self, args: object) -> Config:
         """Aplica argumentos da CLI sobre esta configuração.
@@ -150,6 +213,12 @@ class Config:
             "llm_backend",
             "llamacpp_url",
             "llamacpp_thinking",
+            "llm_thinking",
+            "openai_url",
+            "openai_api_key_env",
+            "fallback_backend",
+            "fallback_after_failures",
+            "llm_max_retries",
             "verbose",
             "overwrite",
             "max_initial_questions",
@@ -196,6 +265,15 @@ class Config:
         )
         for name, value in int_fields:
             _positive_int(name, value)
+        if self.fallback_after_failures <= 0:
+            raise ConfigError(
+                "fallback_after_failures deve ser positivo "
+                f"(recebido: {self.fallback_after_failures})."
+            )
+        if self.llm_max_retries < 0:
+            raise ConfigError(
+                f"llm_max_retries não pode ser negativo (recebido: {self.llm_max_retries})."
+            )
         for name in ("network_timeout", "timeout_seconds", "llm_timeout"):
             value = getattr(self, name)
             if value <= 0:
@@ -224,6 +302,26 @@ class Config:
             raise ConfigError(
                 f"llm_backend inválido: {self.llm_backend!r} (use um de {LLM_BACKENDS})."
             )
+        if self.fallback_backend is not None and self.fallback_backend not in LLM_BACKENDS:
+            raise ConfigError(
+                f"fallback_backend inválido: {self.fallback_backend!r} (use um de {LLM_BACKENDS})."
+            )
+        if self.fallback_backend == self.llm_backend:
+            raise ConfigError(
+                "fallback_backend deve ser diferente de llm_backend "
+                f"(ambos {self.llm_backend!r})."
+            )
+        # Backend remoto exige URL base e identificação do modelo.
+        for backend in (self.llm_backend, self.fallback_backend):
+            if backend != "openai":
+                continue
+            if not (self.openai_url.startswith("http://") or self.openai_url.startswith("https://")):
+                raise ConfigError(
+                    "openai_url deve ser uma URL http(s) quando o backend openai é usado "
+                    f"(recebido: {self.openai_url!r})."
+                )
+            if not self.model.strip():
+                raise ConfigError("model é obrigatório para o backend openai.")
 
     @property
     def investigation_llm_calls(self) -> int:

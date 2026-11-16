@@ -52,7 +52,7 @@ class TestLlamaCppClient:
         assert body["response_format"]["type"] == "json_object"
         assert body["response_format"]["schema"]["properties"]["ok"] == {"type": "boolean"}
         assert body["messages"][0]["role"] == "system"
-        assert body["temperature"] == 0.2
+        assert body["temperature"] == 1.0
         assert captured["body"].url.path == "/v1/chat/completions"
 
     def test_no_schema_sent_when_absent(self):
@@ -360,6 +360,42 @@ class TestFinishReasonParsing:
         client = make_client(handler)
         assert client.complete("s", "u").truncated is False
 
+    def test_empty_content_with_length_sets_truncated(self):
+        """Raciocínio consumiu o teto: sinaliza truncamento (cap dobra no retry)."""
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "choices": [{
+                        "message": {"role": "assistant", "content": ""},
+                        "finish_reason": "length",
+                    }],
+                    "usage": {"completion_tokens": 512},
+                },
+            )
+
+        client = make_client(handler)
+        response = client.complete("s", "u")
+        assert response.truncated is True
+        assert response.content == ""
+        assert response.tokens == 512
+
+    def test_empty_content_without_length_wrapped(self):
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "choices": [{
+                        "message": {"role": "assistant", "content": ""},
+                        "finish_reason": "stop",
+                    }],
+                },
+            )
+
+        client = make_client(handler)
+        with pytest.raises(LlamaCppError):
+            client.complete("s", "u")
+
     def test_ollama_done_reason_length_sets_truncated(self):
         from formiga.ollama import OllamaClient
 
@@ -390,27 +426,27 @@ class TestPlanBudget:
 
 
 class TestThinkingMode:
-    """Modelos de raciocínio: `enable_thinking` desligado por default."""
+    """Modelos de raciocínio: `enable_thinking` ligado por default."""
 
-    def test_disable_thinking_sent_by_default(self):
+    def test_enable_thinking_sent_by_default(self):
         captured: dict = {}
         client = make_client(capture_handler(captured))
         client.complete("s", "u")
         import json
 
         body = json.loads(captured["body"].content)
-        assert body["chat_template_kwargs"] == {"enable_thinking": False}
+        assert body["chat_template_kwargs"] == {"enable_thinking": True}
 
-    def test_thinking_kwarg_absent_when_thinking_enabled(self):
+    def test_disable_thinking_sent_when_flag_off(self):
         captured: dict = {}
         client = make_client(
-            capture_handler(captured), llamacpp_thinking=True
+            capture_handler(captured), llamacpp_thinking=False
         )
         client.complete("s", "u")
         import json
 
         body = json.loads(captured["body"].content)
-        assert "chat_template_kwargs" not in body
+        assert body["chat_template_kwargs"] == {"enable_thinking": False}
 
     def test_env_parsing(self):
         assert Config.from_env({"FORMIGA_LLAMACPP_THINKING": "1"}).llamacpp_thinking
@@ -419,6 +455,12 @@ class TestThinkingMode:
         ).llamacpp_thinking
         with pytest.raises(ConfigError):
             Config.from_env({"FORMIGA_LLAMACPP_THINKING": "talvez"})
+
+    def test_env_thinking_generic(self):
+        assert Config.from_env({"FORMIGA_LLM_THINKING": "1"}).llm_thinking
+        assert not Config.from_env({"FORMIGA_LLM_THINKING": "0"}).llm_thinking
+        with pytest.raises(ConfigError):
+            Config.from_env({"FORMIGA_LLM_THINKING": "talvez"})
 
     def test_thinking_gives_extra_generation_room(self):
         from formiga.llm import (
@@ -430,7 +472,7 @@ class TestThinkingMode:
         )
         from formiga.schemas import QueryProposal
 
-        assert REASONING_EXTRA_TOKENS >= 384  # raciocínio observado ~200+ tokens
+        assert REASONING_EXTRA_TOKENS >= 512  # raciocínio observado ~200+ tokens
 
         calls: list = []
 
@@ -461,16 +503,16 @@ class TestSamplingParams:
         body = json.loads(captured["body"].content)
         assert body["top_k"] == 64
         assert body["top_p"] == 0.95
-        assert body["temperature"] == 0.2  # default para JSON estruturado
+        assert body["temperature"] == 1.0  # default da ficha do Nemotron Bolt
 
     def test_temperature_configurable(self):
         captured: dict = {}
-        client = make_client(capture_handler(captured), llm_temperature=1.0)
+        client = make_client(capture_handler(captured), llm_temperature=0.2)
         client.complete("s", "u")
         import json
 
         body = json.loads(captured["body"].content)
-        assert body["temperature"] == 1.0
+        assert body["temperature"] == 0.2
 
     def test_ollama_sends_recommended_top_k_top_p(self):
         import json
@@ -497,6 +539,68 @@ class TestSamplingParams:
             Config.from_env({"FORMIGA_LLM_TEMPERATURE": "abc"})
         with pytest.raises(ConfigError):
             Config(llm_temperature=3.0).validate()
+
+
+class TestThinkStripping:
+    """Raciocínio inline no `content`: JSON extraído após o bloco de thinking."""
+
+    @staticmethod
+    def _caller(content: str):
+        from formiga.llm import LLMResponse, StructuredCaller
+        from formiga.schemas import QueryProposal
+
+        class Reasoning:
+            def complete(self, system, user, json_schema=None, max_tokens=None):
+                return LLMResponse(content=content)
+
+        return StructuredCaller(Reasoning(), on_call=lambda *a: None), QueryProposal
+
+    def test_json_after_think_block_parses(self):
+        from formiga.llm import TaskType
+
+        caller, schema = self._caller(
+            'ANNELing preciso identificar lacunas. ANNELs\n{"queries": ["ok"]}'
+        )
+        result = caller.call(
+            TaskType.QUERY, "s", "Tarefa: propor até 2 consultas de busca.", schema
+        )
+        assert result is not None and result.queries == ["ok"]
+
+    def test_json_fence_after_think_block_parses(self):
+        from formiga.llm import TaskType
+
+        caller, schema = self._caller(
+            'ANNELing raciocínio ANNELs\n```json\n{"queries": ["ok"]}\n```'
+        )
+        result = caller.call(
+            TaskType.QUERY, "s", "Tarefa: propor até 2 consultas de busca.", schema
+        )
+        assert result is not None
+
+    def test_unclosed_think_block_fails(self):
+        from formiga.llm import TaskType
+
+        caller, schema = self._caller("ANNELing raciocínio sem fechamento")
+        assert caller.call(
+            TaskType.QUERY, "s", "Tarefa: propor até 2 consultas de busca.", schema
+        ) is None
+
+
+class TestGenerationCaps:
+    """Caps com thinking: folga extra e teto dobrado suficiente."""
+
+    def test_max_generation_tokens_accommodates_reasoning(self):
+        from formiga.llm import MAX_GENERATION_TOKENS, REASONING_EXTRA_TOKENS
+
+        assert MAX_GENERATION_TOKENS >= 4096
+        assert REASONING_EXTRA_TOKENS >= 512
+
+    def test_doubled_cap_hits_max_not_below(self):
+        from formiga.llm import MAX_GENERATION_TOKENS, TASK_MAX_TOKENS, TaskType
+
+        base = TASK_MAX_TOKENS[TaskType.EXTRACT]
+        with_reasoning = base + 512  # REASONING_EXTRA_TOKENS
+        assert min(with_reasoning * 2, MAX_GENERATION_TOKENS) == MAX_GENERATION_TOKENS
 
 
 class TestExtractionRegression:

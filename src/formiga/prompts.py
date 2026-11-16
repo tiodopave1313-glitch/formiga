@@ -32,11 +32,14 @@ def plan_prompt(question: str, restrictions: list[str]) -> str:
         )
         + "\nDevolva JSON com:\n"
         '- "objective": objetivo interpretado da pesquisa (1 frase);\n'
-        '- "assumptions": premissas adotadas quando a pergunta é ambígua '
-        "(1 frase por premissa, no máximo 3);\n"
-        '- "sufficiency_criteria": o que permitiria responder (1 frase);\n'
+        '- "assumptions": lista JSON de strings — premissas adotadas quando a '
+        "pergunta é ambígua (1 frase por item, no máximo 3 itens);\n"
+        '- "sufficiency_criteria": lista JSON de strings — o que permitiria '
+        "responder (1 ou mais itens);\n"
         '- "questions": lista com até 3 itens, cada um com "question" (1 frase), '
         '"priority" (high|medium|low) e "sufficiency" (1 frase).\n'
+        "Importante: \"assumptions\" e \"sufficiency_criteria\" são sempre "
+        "arrays JSON de strings, nunca uma única string.\n"
         "Seja conciso: cada campo é curto e objetivo. "
         "Use no máximo 1 questão se a pergunta for simples."
     )
@@ -70,10 +73,16 @@ def extract_prompt(question: str, q: dict, chunks: list[dict]) -> str:
         "- Uma citação deve pertencer a um único trecho, identificado por fonte e índice.\n\n"
         f"Questão ({q['id']}): {q['question']}\n\n"
         + _material(material)
-        + "\n\nDevolva JSON com \"claims\": lista de itens com "
-        "\"text\" (afirmação), \"type\" (direct|inference|recommendation), "
+        + "\n\nDevolva um objeto JSON com a chave \"claims\" — nunca devolva {} "
+        "ou omita a chave. Se os trechos não responderem à questão, devolva "
+        "exatamente {\"claims\": []}; caso contrário, preencha a lista.\n"
+        "Cada item de \"claims\" tem: \"text\" (afirmação), "
+        "\"type\" (direct|inference|recommendation), "
         "\"quotes\": lista de {\"source_id\", \"chunk_index\", \"quote\"} e "
-        "\"scope_or_caveat\" (condições ou ressalvas, pode ser null)."
+        "\"scope_or_caveat\" (condições ou ressalvas, pode ser null).\n"
+        'Exemplo de item: {"text": "A compostagem enriquece o solo", '
+        '"type": "direct", "quotes": [{"source_id": "S1", "chunk_index": 3, '
+        '"quote": "trecho literal copiado do material"}], "scope_or_caveat": null}.'
     )
 
 

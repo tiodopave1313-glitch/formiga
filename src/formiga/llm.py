@@ -42,14 +42,16 @@ TASK_MAX_TOKENS: dict[TaskType, int] = {
 }
 
 # Teto absoluto quando uma resposta truncada pede mais espaço (cap dobrado).
-MAX_GENERATION_TOKENS = 2048
+# Com thinking ligado, o raciocínio consome o teto antes do JSON — 2048
+# saturava o par raciocínio + resposta nas tarefas verbosas.
+MAX_GENERATION_TOKENS = 4096
 
 # Conteúdo bruto logado em evento quando a validação falha (diagnóstico).
 RAW_LOG_CHARS = 300
 
 # Modelos de raciocínio geram `reasoning_content` antes do JSON; quando o
 # thinking está ligado, os caps por tarefa recebem esse adicional.
-REASONING_EXTRA_TOKENS = 384
+REASONING_EXTRA_TOKENS = 512
 
 
 @dataclass
@@ -225,9 +227,24 @@ def _parse_and_validate(
         return False, None, f"Schema incorreto: {exc.error_count()} erro(s) — {exc}"
 
 
+def _strip_think(text: str) -> str:
+    """Descarta blocos de raciocínio `ANNELing ... ANNELs` do conteúdo.
+
+    Backends sem parser de reasoning embutem o raciocínio no `content`; o
+    JSON esperado vem depois do fechamento do bloco.
+    """
+    if "ANNELing" not in text:
+        return text
+    start = text.index("ANNELing")
+    end = text.find("ANNELs", start)
+    if end == -1:
+        return text[:start]
+    return text[:start] + text[end + len("ANNELs"):]
+
+
 def _extract_json(content: str) -> object:
     """Aceita JSON puro ou cercado por ```json ... ```; recusa texto solto."""
-    text = content.strip()
+    text = _strip_think(content).strip()
     if text.startswith("```"):
         lines = text.splitlines()
         if len(lines) < 2:

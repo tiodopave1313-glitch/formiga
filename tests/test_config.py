@@ -16,7 +16,7 @@ from formiga.config import (
 class TestDefaults:
     def test_defaults_match_prd(self):
         config = Config()
-        assert config.model == DEFAULT_MODEL == "llama3.1:8b"
+        assert config.model == DEFAULT_MODEL == "nemotron-3.5-bolt"
         assert config.ollama_url == "http://localhost:11434"
         assert config.searxng_url == "http://localhost:8080"
         assert config.max_initial_questions == 4

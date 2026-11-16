@@ -63,18 +63,46 @@ ProgressFn = Callable[[str], None]
 
 class LLMClientProtocol(Protocol):
     def complete(
-        self, system: str, user: str, json_schema: dict | None = None
+        self,
+        system: str,
+        user: str,
+        json_schema: dict | None = None,
+        max_tokens: int | None = None,
     ) -> LLMResponse: ...
 
 
 def build_llm_client(
     config: Config, remaining_seconds: Callable[[], float] | None = None
 ) -> LLMClientProtocol:
-    """Escolhe o backend de modelo conforme `config.llm_backend`."""
-    if config.llm_backend == "llamacpp":
+    """Escolhe o backend conforme `config.llm_backend`; fallback é opt-in.
+
+    Sem `config.fallback_backend`, devolve apenas o cliente principal — o
+    comportamento é idêntico ao de antes do failover existir.
+    """
+    primary = _build_backend(config, config.llm_backend, remaining_seconds)
+    if config.fallback_backend is None:
+        return primary
+    from formiga.fallback import FallbackLLMClient
+
+    backup = _build_backend(config, config.fallback_backend, remaining_seconds)
+    return FallbackLLMClient(
+        primary, backup, after_failures=config.fallback_after_failures
+    )
+
+
+def _build_backend(
+    config: Config,
+    backend: str,
+    remaining_seconds: Callable[[], float] | None,
+) -> LLMClientProtocol:
+    if backend == "llamacpp":
         from formiga.llamacpp import LlamaCppClient
 
         return LlamaCppClient(config, remaining_seconds=remaining_seconds)
+    if backend == "openai":
+        from formiga.openai import OpenAIClient
+
+        return OpenAIClient(config, remaining_seconds=remaining_seconds)
     from formiga.ollama import OllamaClient
 
     return OllamaClient(config, remaining_seconds=remaining_seconds)
@@ -145,10 +173,35 @@ def run_research(
             event.update({k: v for k, v in info.items() if v is not None})
         append_event(output_dir, "llm_call", event)
 
+    def on_llm_retry(status: int, attempt: int, delay: float) -> None:
+        """Retry HTTP do backend remoto: consome tempo do deadline, não chamada."""
+        append_event(
+            output_dir,
+            "llm_retry",
+            {"status": status, "attempt": attempt, "delay_seconds": round(delay, 2)},
+        )
+
+    from formiga.fallback import FallbackLLMClient
+    from formiga.openai import OpenAIClient
+
+    wired: list[object] = [client]
+    if isinstance(client, FallbackLLMClient):
+        client.on_fallback = lambda exc: append_event(
+            output_dir, "llm_fallback", {"error": str(exc)}
+        )
+        wired.append(client.fallback)
+    for candidate in wired:
+        if isinstance(candidate, OpenAIClient):
+            candidate.on_retry = on_llm_retry
+
     caller = StructuredCaller(
         client,
         on_call=on_llm_call,
-        extra_tokens=REASONING_EXTRA_TOKENS if config.llamacpp_thinking else 0,
+        extra_tokens=(
+            REASONING_EXTRA_TOKENS
+            if (config.llamacpp_thinking or config.llm_thinking)
+            else 0
+        ),
     )
     state = ResearchState(contract=ResearchContract(question=config.question or "", objective=""))
 

@@ -22,7 +22,7 @@ class TestOllama:
             body = json.loads(request.content)
             assert body["format"] == "json"
             assert body["stream"] is False
-            assert body["model"] == "llama3.1:8b"
+            assert body["model"] == "nemotron-3.5-bolt"
             if not payload_ok:
                 return httpx.Response(200, json={"nope": True})
             return httpx.Response(
@@ -65,6 +65,71 @@ class TestOllama:
         client = OllamaClient(
             config(), transport=httpx.MockTransport(self._handler(payload_ok=False))
         )
+        with pytest.raises(OllamaError):
+            client.complete("s", "u")
+
+
+class TestOllamaThinking:
+    def test_think_sent_by_default(self):
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["body"] = json.loads(request.content)
+            return httpx.Response(
+                200,
+                json={"message": {"role": "assistant", "content": "x"}, "eval_count": 1},
+            )
+
+        client = OllamaClient(config(), transport=httpx.MockTransport(handler))
+        client.complete("s", "u")
+        assert captured["body"]["think"] is True
+
+    def test_think_absent_when_flag_off(self):
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["body"] = json.loads(request.content)
+            return httpx.Response(
+                200,
+                json={"message": {"role": "assistant", "content": "x"}, "eval_count": 1},
+            )
+
+        client = OllamaClient(
+            config(llm_thinking=False), transport=httpx.MockTransport(handler)
+        )
+        client.complete("s", "u")
+        assert "think" not in captured["body"]
+
+    def test_400_thinking_falls_back_without_it(self):
+        """Modelo sem suporte a thinking: 1 repetição sem `think` e não insiste."""
+        captured: dict = {"calls": 0}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["calls"] += 1
+            captured["body"] = json.loads(request.content)
+            if captured["calls"] == 1:
+                return httpx.Response(400, text="model does not support thinking")
+            return httpx.Response(
+                200,
+                json={
+                    "message": {"role": "assistant", "content": '{"queries": ["a"]}'},
+                    "eval_count": 42,
+                },
+            )
+
+        client = OllamaClient(config(), transport=httpx.MockTransport(handler))
+        response = client.complete("s", "u")
+        assert response.content == '{"queries": ["a"]}'
+        assert captured["calls"] == 2
+        assert "think" not in captured["body"]
+        # Desativado para o resto da execução.
+        assert client.think is False  # noqa: SLF001
+
+    def test_400_unrelated_error_not_masked(self):
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(400, text="bad model name")
+
+        client = OllamaClient(config(), transport=httpx.MockTransport(handler))
         with pytest.raises(OllamaError):
             client.complete("s", "u")
 

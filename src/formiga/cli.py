@@ -8,6 +8,7 @@ from pathlib import Path
 
 from formiga import __version__
 from formiga.config import Config, ConfigError
+from formiga.configfile import load_file_values
 from formiga.orchestrator import run_research
 from formiga.storage import OutputDirExists, StorageError
 
@@ -27,7 +28,14 @@ def build_parser() -> argparse.ArgumentParser:
     research = sub.add_parser("research", help="Executa uma pesquisa e gera um relatório.")
     research.add_argument("question", help="Pergunta a investigar.")
     research.add_argument("--output", type=Path, help="Diretório de saída.")
-    research.add_argument("--model", help="Nome do modelo no Ollama.")
+    research.add_argument(
+        "--config",
+        default=None,
+        help="Arquivo de configuração TOML (default: ./formiga.toml se existir).",
+    )
+    research.add_argument(
+        "--model", help="Nome do modelo no Ollama ou ID do modelo no backend remoto."
+    )
     research.add_argument("--ollama-url", dest="ollama_url", help="Endpoint do Ollama.")
     research.add_argument(
         "--searxng-url", dest="searxng_url", help="Endpoint da instância SearXNG."
@@ -35,8 +43,58 @@ def build_parser() -> argparse.ArgumentParser:
     research.add_argument(
         "--llm-backend",
         dest="llm_backend",
-        choices=["ollama", "llamacpp"],
-        help="Backend do modelo: API do Ollama ou llama-server (llama.cpp).",
+        choices=["ollama", "llamacpp", "openai"],
+        help="Backend do modelo: Ollama, llama-server ou endpoint remoto OpenAI-compatível.",
+    )
+    research.add_argument(
+        "--llm-base-url",
+        dest="openai_url",
+        help=(
+            "URL base do endpoint remoto OpenAI-compatível "
+            "(ex.: https://integrate.api.nvidia.com/v1)."
+        ),
+    )
+    research.add_argument(
+        "--api-key-env",
+        dest="openai_api_key_env",
+        help=(
+            "Nome da variável de ambiente com a chave do endpoint remoto "
+            "(default: NVIDIA_API_KEY)."
+        ),
+    )
+    research.add_argument(
+        "--llm-thinking",
+        dest="llm_thinking",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "Deixar o modelo raciocinar antes do JSON (os limites por tarefa "
+            "recebem folga extra de tokens). Default: ligado."
+        ),
+    )
+    research.add_argument(
+        "--fallback-backend",
+        dest="fallback_backend",
+        choices=["ollama", "llamacpp", "openai"],
+        default=None,
+        help=(
+            "Backup opt-in: ativa somente após falhas do backend principal "
+            "e permanece pelo resto da execução. Default: sem backup."
+        ),
+    )
+    research.add_argument(
+        "--fallback-after-failures",
+        dest="fallback_after_failures",
+        type=int,
+        default=None,
+        help="Falhas consecutivas do principal antes do backup assumir (default 1).",
+    )
+    research.add_argument(
+        "--llm-max-retries",
+        dest="llm_max_retries",
+        type=int,
+        default=None,
+        help="Retries HTTP (429/5xx) no backend remoto, com backoff (default 2).",
     )
     research.add_argument(
         "--llamacpp-url", dest="llamacpp_url", help="Endpoint do llama-server (OpenAI-compatível)."
@@ -44,10 +102,11 @@ def build_parser() -> argparse.ArgumentParser:
     research.add_argument(
         "--llamacpp-thinking",
         dest="llamacpp_thinking",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
+        default=None,
         help=(
             "Deixar o modelo raciocinar antes do JSON (consome tokens de geração; "
-            "os limites por tarefa recebem folga extra). Default: desligado."
+            "os limites por tarefa recebem folga extra). Default: ligado."
         ),
     )
     research.add_argument("--max-searches", dest="max_searches", type=int, help="Limite de buscas.")
@@ -62,15 +121,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--llm-timeout-seconds",
         dest="llm_timeout",
         type=float,
-        help="Timeout por chamada ao modelo (default 120; CPU lenta pode exigir mais).",
+        help="Timeout por chamada ao modelo (default 300; CPU lenta pode exigir mais).",
     )
     research.add_argument(
         "--llm-temperature",
         dest="llm_temperature",
         type=float,
         help=(
-            "Temperatura de amostragem (default 0.2; a Gemma 4 recomenda 1.0 "
-            "para uso geral)."
+            "Temperatura de amostragem (default 1.0, recomendado pela ficha "
+            "do Nemotron 3.5 Bolt; 0.2 pode ajudar em JSON estruturado)."
         ),
     )
     research.add_argument(
@@ -102,7 +161,13 @@ def main(argv: list[str] | None = None) -> int:
             print("Erro: a pergunta não pode ser vazia.", file=sys.stderr)
             return EXIT_INVALID_INPUT
         try:
-            config = Config.from_env().apply_args(args)
+            from formiga.envfile import load_env_file
+
+            # .env preenche variáveis ausentes (ex.: NVIDIA_API_KEY); o
+            # ambiente real sempre vence. Precisa vir antes da config.
+            load_env_file()
+            file_values = load_file_values(explicit=getattr(args, "config", None))
+            config = Config.from_sources(file_values=file_values).apply_args(args)
         except ConfigError as exc:
             print(f"Erro de configuração: {exc}", file=sys.stderr)
             return EXIT_INVALID_INPUT

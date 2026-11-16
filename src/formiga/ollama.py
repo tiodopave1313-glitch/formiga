@@ -29,6 +29,9 @@ class OllamaClient:
         self.model = config.model
         self.llm_timeout = config.llm_timeout
         self.temperature = config.llm_temperature
+        # Modelos de raciocínio (Nemotron Bolt): pedir thinking explicitamente.
+        # Modelos sem suporte respondem 400; aí desliga para o resto da run.
+        self.think = config.llm_thinking
         self._remaining = remaining_seconds
         self._transport = transport
 
@@ -61,6 +64,8 @@ class OllamaClient:
                 "top_p": 0.95,
             },
         }
+        if self.think:
+            payload["think"] = True
         if max_tokens is not None:
             payload["options"]["num_predict"] = max_tokens
         try:
@@ -68,8 +73,16 @@ class OllamaClient:
                 timeout=self._effective_timeout(), transport=self._transport
             ) as client:
                 response = client.post(f"{self.url}/api/chat", json=payload)
-            response.raise_for_status()
-            data = response.json()
+                if response.status_code == 400 and self.think:
+                    body = response.text.lower()
+                    if "think" in body:
+                        # Modelo sem suporte a thinking: repetir sem o campo e
+                        # não voltar a pedi-lo nesta execução.
+                        self.think = False
+                        del payload["think"]
+                        response = client.post(f"{self.url}/api/chat", json=payload)
+                response.raise_for_status()
+                data = response.json()
         except httpx.HTTPError as exc:
             raise OllamaError(f"Falha ao chamar o Ollama: {exc}") from exc
         except ValueError as exc:

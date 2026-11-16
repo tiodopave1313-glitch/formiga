@@ -493,7 +493,7 @@ Precedência:
 Variáveis:
 
 ```text
-FORMIGA_MODEL=llama3.1:8b
+FORMIGA_MODEL=nemotron-3.5-bolt
 FORMIGA_OLLAMA_URL=http://localhost:11434
 FORMIGA_SEARXNG_URL=http://localhost:8080
 ```
@@ -688,3 +688,26 @@ Implementar em etapas pequenas, executando os testes relevantes ao final de cada
 - Rodar a suíte completa.
 - Executar o smoke test manual, se os serviços estiverem disponíveis.
 - Documentar resultados reais e limitações; não declarar testes externos como executados se não estiverem.
+
+---
+
+## 17. Extensão pós-MVP: backend remoto e failover opt-in
+
+Implementado além do escopo original deste PRD (seção 10 cobria apenas
+Ollama/llama.cpp locais):
+
+- Backend `openai`: qualquer endpoint remoto OpenAI-compatível (NVIDIA NIM,
+  OpenAI, DeepSeek, vLLM...), com `Authorization: Bearer`, envio de `model`,
+  retries (429/5xx, backoff + `Retry-After`) e fallback de `response_format`
+  quando o servidor não o suporta. O schema não é imposto remotamente — a
+  validação permanece no harness, conforme o princípio da seção 10.
+- Arquivo de configuração TOML (`formiga.toml`) com precedência
+  CLI > env > arquivo > defaults (`src/formiga/configfile.py`).
+- Failover **opt-in** (`fallback_backend`): após falhas consecutivas do
+  backend principal, um backup assume e permanece (circuit breaker). Sem a
+  opção, o comportamento é o do MVP. Migrações viram eventos `llm_fallback`.
+- A chave da API vem de variável de ambiente (`api_key_env`) ou do arquivo de
+  config com permissão 0600; nunca aparece em logs, eventos ou erros.
+
+O restante deste PRD (controle pelo harness, orçamentos, evidências com
+proveniência, relatório a partir de afirmações) permanece inalterado.

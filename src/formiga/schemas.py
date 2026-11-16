@@ -40,7 +40,9 @@ class ExtractClaim(BaseModel):
 
 
 class ExtractProposal(BaseModel):
-    claims: list[ExtractClaim] = Field(default_factory=list)
+    # Obrigatória: abstinência válida é `{"claims": []}` explícito — um `{}`
+    # vago não pode passar como extração.
+    claims: list[ExtractClaim]
 
 
 class VerifyProposal(BaseModel):

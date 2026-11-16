@@ -30,8 +30,8 @@ class LlamaCppClient:
         self.url = config.llamacpp_url.rstrip("/")
         self.llm_timeout = config.llm_timeout
         self.temperature = config.llm_temperature
-        # Modelos de raciocínio: desligar o thinking por default — o
-        # `reasoning_content` consome o teto de geração antes do JSON.
+        # Modelos de raciocínio (Nemotron Bolt): o kwarg do chat template
+        # controla o thinking; default ligado (o default do próprio template).
         self.disable_thinking = not config.llamacpp_thinking
         self._remaining = remaining_seconds
         self._transport = transport
@@ -63,6 +63,8 @@ class LlamaCppClient:
         }
         if self.disable_thinking:
             payload["chat_template_kwargs"] = {"enable_thinking": False}
+        else:
+            payload["chat_template_kwargs"] = {"enable_thinking": True}
         if json_schema is not None:
             payload["response_format"]["schema"] = json_schema
         if max_tokens is not None:
@@ -79,13 +81,24 @@ class LlamaCppClient:
         except ValueError as exc:
             raise LlamaCppError(f"Resposta não-JSON do llama-server: {exc}") from exc
         try:
-            content = data["choices"][0]["message"]["content"]
+            choice = data["choices"][0]
+            message = choice["message"]
+            content = message["content"]
         except (KeyError, IndexError, TypeError) as exc:
             raise LlamaCppError(f"Resposta do llama-server sem conteúdo: {data!r}") from exc
         usage = data.get("usage") or {}
         tokens = usage.get("completion_tokens")
         # `finish_reason: "length"` = cortado no limite de geração (JSON truncado).
-        truncated = data["choices"][0].get("finish_reason") == "length"
+        truncated = choice.get("finish_reason") == "length"
+        if not isinstance(content, str) or not content.strip():
+            if truncated:
+                # O raciocínio consumiu o teto antes do JSON: sinalizar o
+                # truncamento para o chamador dobrar o cap e tentar de novo.
+                return LLMResponse(
+                    content="", tokens=tokens if isinstance(tokens, int) else None,
+                    truncated=True,
+                )
+            raise LlamaCppError(f"Resposta do llama-server sem conteúdo: {data!r}")
         return LLMResponse(
             content=content, tokens=tokens if isinstance(tokens, int) else None,
             truncated=truncated,

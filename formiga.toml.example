@@ -1,0 +1,40 @@
+# Exemplo de configuração do Formiga (TOML).
+#
+# Uso: copie para `formiga.toml` no diretório do projeto (ignorado pelo git)
+# ou aponte `--config` / `FORMIGA_CONFIG` para o arquivo. Sem arquivo, a
+# configuração vem de variáveis de ambiente e da CLI.
+#
+# Precedência: CLI > variáveis de ambiente > arquivo > defaults.
+
+[llm]
+# Backend do modelo: "ollama" | "llamacpp" | "openai" (remoto OpenAI-compatível).
+backend = "openai"
+# "model" é o ID do modelo no backend remoto (ou nome no Ollama).
+model = "nvidia/nemotron-3.5-bolt-e4b"
+# URL base do endpoint remoto (obrigatória para backend "openai").
+base_url = "https://integrate.api.nvidia.com/v1"
+# Nome da variável de ambiente que contém a chave (recomendado; nunca a
+# chave em texto plano aqui). O valor real fica no arquivo `.env` do projeto
+# (ignorado pelo git, permissão 0600) — veja .env.example.
+api_key_env = "NVIDIA_API_KEY"
+temperature = 1.0
+timeout_seconds = 120.0
+# Retries HTTP para 429/5xx no backend remoto, com backoff e Retry-After.
+max_retries = 2
+# Modelos de raciocínio (Nemotron Bolt): thinking ligado por default.
+thinking = true
+
+# Backup opt-in: só ativa se você descomentar. Após a primeira falha de
+# transporte do backend principal, o backup assume e permanece pelo resto
+# da execução (circuit breaker).
+# fallback_backend = "ollama"
+# fallback_after_failures = 1
+
+[search]
+searxng_url = "http://localhost:8080"
+
+[budget]
+max_searches = 12
+max_pages = 18
+max_llm_calls = 40
+timeout_seconds = 900
