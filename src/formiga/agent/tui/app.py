@@ -351,10 +351,10 @@ class AgentApp(App):
         perfil = self.controller.config.active_profile
         perfil_txt = f" · perfil {perfil}" if perfil else ""
         ctx_txt = f"ctx {ctx // 1000}k/{max_ctx // 1000}k" if max_ctx else ""
-        ext_txt = f"ext {ext} ferramentas" if ext else ""
+        ext_txt = f"ext {ext}" if ext else ""
         partes = [
             f"turnos {turns}/{max_turns}",
-            f"chamadas {calls}/{max_calls}",
+            f"llm {calls}/{max_calls}",
         ]
         if ctx_txt:
             partes.append(ctx_txt)
@@ -365,4 +365,13 @@ class AgentApp(App):
         if perfil_txt:
             partes.append(perfil_txt)
         status = " · ".join(partes)
+        # Alvo 80×24: nunca excede 80 colunas (corta perfil, depois o estado).
+        if len(status) > 80:
+            if perfil_txt:
+                status = " · ".join(partes[:-1])
+            if len(status) > 80:
+                base = " · ".join(partes[:-1])
+                sufixo = f" · {spinner} "
+                estado_max = max(0, 80 - len(base) - len(sufixo))
+                status = base + sufixo + estado[:estado_max]
         self.query_one("#status", Static).update(status)

@@ -259,5 +259,5 @@ async def test_barra_de_status_orcamento(tmp_path):
         await _esperar_idle(app, controller, pilot)
         status = str(app.query_one("#status").render())
         # turnos e chamadas refletindo o loop (1 tool call + resposta final)
-        assert "chamadas 2/" in status
+        assert "llm 2/" in status
         assert "ocioso" in status
