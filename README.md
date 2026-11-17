@@ -18,11 +18,19 @@ verificar, comparar, sintetizar e auditar.
 Requer Python 3.11+.
 
 ```bash
-uv venv .venv
-uv pip install --python .venv/bin/python -e .
+python -m venv .venv
+source .venv/bin/activate
+pip install -e .              # sem o extra `gui`, só `formiga research`
+pip install ".[gui]"          # com o extra `gui`, também `formiga agent --tui`
 ```
 
+Os extras são opcionais: o extra `gui` instala o Textual, necessário apenas para
+a TUI interativa (`formiga agent --tui`). Nem `uv` nem ferramentas além do `pip`
+são exigidas.
+
 ## Uso
+
+### `formiga research` — pesquisa controlada pelo programa
 
 ```bash
 formiga research \
@@ -43,6 +51,23 @@ configuração inválida, `1` falha operacional, `130` interrompido pelo usuári
 
 Execuções interrompidas podem ser inspecionadas (o checkpoint permanece
 legível), mas **não são retomadas** no MVP.
+
+### `formiga agent` — harness agêntico (CLI interativa, TUI ou headless)
+
+```bash
+formiga agent "qualquer pergunta sobre o projeto"
+```
+
+- Sem flags: **CLI interativa** — `pergunta>`, streaming token a token, linhas
+  de ferramenta em linha (`⚙ bash — command=…`), barra de orçamento
+  (`turnos n/24 · llm n/120 · ctx Xk/Yk · ext N ferramentas`) e comandos `/`
+  (`/tools`, `/ext`, `/budget`, `/new`).
+- `--print`: headless, imprime a resposta final no stdout (útil em scripts).
+- `--tui`: TUI Textual (80×24, barra de status com perfil, eventos de extensão
+  em linha, `Esc`/`Ctrl+C` cooperativos). Requer o extra `gui`.
+
+Configuração via CLI, variáveis de ambiente (`FORMIGA_*`) ou `./formiga.toml`
+(precedência: CLI > env > arquivo > defaults). Veja `formiga.toml.example`.
 
 ## Opções de `research`
 
@@ -102,6 +127,42 @@ max_searches = 12
 max_pages = 18
 max_llm_calls = 40
 timeout_seconds = 900
+
+[extensions]
+# Builtins do MVP; ordem de carregamento é fixa: core, web, deepsearch.
+enabled = ["core", "web", "deepsearch"]
+# Diretórios de projeto cujo .formiga/ carrega (allowlist global).
+trusted_projects = []
+
+[agent]
+max_turns = 24
+max_llm_calls = 120
+timeout_seconds = 1800
+max_deep_searches = 2
+max_web_searches = 6
+max_web_fetches = 8
+tool_result_chars = 4000
+workdir = "."
+
+# Perfis de modelo (§9.6 do PRD): seleção por substring do nome do modelo.
+[profile]
+# active = "nemotron-3.5-bolt-e4b"   # sobrescreve a auto-seleção
+
+[profiles.gemma4-e4b]
+context_tokens = 32768                 # janela útil, não a anunciada
+thinking = false
+temperature = 1.0
+top_p = 0.95
+max_tokens_per_turn = 4096
+tool_schema_tokens = 1600
+
+[profiles.nemotron-3.5-bolt-e4b]
+thinking = true
+temperature = 1.0
+top_p = 0.95
+
+[ext.core]
+unsafe_bash = false                    # AGENT_UNSAFE=1 para permitir
 ```
 
 ## Configuração
@@ -110,7 +171,7 @@ Precedência: argumento da CLI > variável de ambiente > arquivo TOML > valor pa
 
 ### Arquivo de segredos (`.env`)
 
-A chave da API fica em um arquivo `.env` no diretório do projeto (ignorado
+A chave da API fica em um arquivo `.env` no diretório do projeto (ignorada
 pelo git, permissão `0600` exigida). Copie `.env.example` para `.env` e
 preencha:
 
@@ -141,6 +202,13 @@ FORMIGA_LLM_TIMEOUT=300             # timeout por chamada ao modelo (segundos)
 FORMIGA_LLM_TEMPERATURE=1.0         # temperatura de amostragem (ficha do modelo)
 FORMIGA_LLM_THINKING=1              # 0 = desligar o raciocínio (default: 1)
 FORMIGA_LLAMACPP_THINKING=1         # override do thinking só no llama.cpp
+FORMIGA_AGENT_MAX_TURNS=24
+FORMIGA_AGENT_MAX_LLM_CALLS=120
+FORMIGA_AGENT_TIMEOUT_SECONDS=1800
+FORMIGA_AGENT_MAX_CONTEXT_TOKENS=32768
+FORMIGA_AGENT_TOOL_SCHEMA_TOKENS=1600
+FORMIGA_PROFILE_MODEL_HINT=
+FORMIGA_EXTENSIONS_ENABLED=core,web,deepsearch
 ```
 
 A chave do backend remoto nunca vai na CLI. Fontes possíveis, em ordem de
@@ -264,6 +332,9 @@ Depois inspecione:
 
 Esse teste demonstra integração, **não comprova qualidade factual**.
 
+O smoke do harness agêntico (`formiga agent`, com `/budget`, `/new`,
+extensões, perfis e `NO_COLOR`) está em `docs/smoke_agent.md`.
+
 ## Privacidade
 
 - A pergunta e os trechos de páginas são enviados ao backend de modelo
@@ -291,8 +362,11 @@ cada conexão, sem fixação de IP na conexão TLS.
 formiga/
 ├── pyproject.toml
 ├── docs/prd.md            # especificação (fonte da verdade do escopo)
+├── docs/prd_v2.md         # roteiro v2 (Fases 1–11 do Formiga Agent)
+├── formiga.toml.example   # exemplo de arquivo de configuração
+├── .env.example           # exemplo de arquivo de segredos
 ├── src/formiga/
-│   ├── cli.py             # argparse, códigos de saída
+│   ├── cli.py             # argparse, comandos (research, agent, trust, untrust)
 │   ├── config.py          # precedência CLI > env > default
 │   ├── configfile.py      # arquivo de config TOML (default < arquivo < env < CLI)
 │   ├── envfile.py         # arquivo .env que só preenche variáveis ausentes
@@ -312,6 +386,24 @@ formiga/
 │   ├── evidence.py        # verificação determinística + textos das fontes
 │   ├── report.py          # relatório a partir de afirmações, não snippets
 │   └── storage.py         # state.json atômico, events.jsonl
+│   └── agent/             # harness agêntico (Formiga Agent, Fases 1–5)
+│       ├── loop.py        # loop de turnos (orçamento, eviction, âncora)
+│       ├── factory.py     # build_agent: discovery → registry → loop
+│       ├── profiles.py    # perfis de modelo (gemma4-e4b, nemotron-3.5-bolt-e4b)
+│       ├── guardrails.py  # AgentBudget, ToolBudgets, AntiLoop
+│       ├── session.py     # sessão em disco (messages, events, transcript)
+│       ├── extensions/    # engine de extensões (registro, hooks, eventos)
+│       │   ├── api.py     # ExtensionAPI (register_tool, on, ui.notify)
+│       │   ├── registry.py# ExtensionRegistry, ExtensionContext, set_event_sink
+│       │   ├── budget.py  # estimativa de tokens, schema_tokens, eviction
+│       │   └── discovery.py# descoberta builtin / .formiga/extensions / entry-points
+│       └── tui/           # TUI Textual (80×24, barra de status)
+│           ├── app.py     # AgentApp, _handle_event, _update_status
+│           └── controller.py
+│   └── ext/               # ferramentas builtin (core, web, deepsearch)
+│       ├── core/          # bash, read, edit (+ /tools, /ext, /budget, /new)
+│       ├── web/           # web_search
+│       └── deepsearch/    # deep_search com progresso em linha
 └── tests/                 # testes offline com adaptadores falsos
 ```
 
@@ -339,3 +431,6 @@ adaptadores falsos (`tests/fakes.py`, `tests/fixtures/`).
   paralela — por escolha do escopo do MVP.
 - Avaliação formal de qualidade (perguntas anotadas, revisão humana) fica
   para depois do MVP, conforme a seção 14 do PRD.
+- Gateway local com retomada de sessões (`formiga gateway`), tarefas agendadas
+  (`formiga cron`), memória estilo Hermes (`ext/memory`), skills e adapters de
+  plataformas de mensagem são fases 6–11 do PRD — pós-MVP, não incluídos.
