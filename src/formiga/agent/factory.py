@@ -2,15 +2,19 @@
 
 Usada por CLI (`--print`) e TUI — regra do PRD §4: CLI e TUI usam os mesmos
 schemas, limites e persistência.
+
+A única porta do núcleo até as ferramentas é o `ExtensionRegistry`, populado
+pela descoberta (`discover_extensions`). Nenhuma ferramenta concreta é
+importada daqui.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from importlib import import_module
 
 from formiga.agent.chat import build_chat_client
-from formiga.agent.extensions.registry import ExtensionContext, ExtensionRegistry
+from formiga.agent.extensions.discovery import discover_extensions
+from formiga.agent.extensions.registry import ExtensionRegistry
 from formiga.agent.loop import AgentLoop
 from formiga.agent.session import Session
 from formiga.config import Config
@@ -21,27 +25,18 @@ def build_agent(
     session: Session,
     on_event: Callable[[str, dict], None] | None = None,
 ) -> AgentLoop:
-    """Monta o agente por extensões builtin e entrega tools pelo registry."""
+    """Monta o agente por descoberta de extensões e entrega o registry ao loop."""
     chat_client = build_chat_client(config)
     registry = ExtensionRegistry()
-    extension_api = ExtensionContext(registry, config, session)
 
-    # A ordem é explícita e determinística. A descoberta externa é fase 2.
-    available = ("core", "web", "deepsearch")
-    enabled = tuple(getattr(config, "extensions_enabled", available))
-    unknown = set(enabled) - set(available)
-    if unknown:
-        raise ValueError(f"extensões builtin desconhecidas: {sorted(unknown)}")
-    for name in available:
-        if name in enabled:
-            extension = import_module(f"formiga.ext.{name}")
-            extension.setup(extension_api)
+    # Descoberta determinística (builtin → pip → global → projeto). Na Fase 1
+    # somente builtin está ativa; pip/global/projeto entram na Fase 2.
+    discover_extensions(config, session, registry)
 
     return AgentLoop(
         chat_client,
-        list(registry.tools.values()),
+        registry,
         session,
         config,
         on_event=on_event,
-        registry=registry,
     )
