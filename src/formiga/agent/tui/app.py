@@ -339,8 +339,10 @@ class AgentApp(App):
         if self._interrupt_pending:
             estado = "interrompendo? Esc de novo confirma · outra tecla continua"
         spinner = "⠿" if self.controller.running else "·"
+        perfil = self.controller.config.active_profile
+        perfil_txt = f" · perfil {perfil}" if perfil else ""
         status = (
             f" turnos {turns}/{max_turns} · chamadas {calls}/{max_calls} · "
-            f"{_bar(ratio)} {ratio * 100:.0f}% · {spinner} {estado}"
+            f"{_bar(ratio)} {ratio * 100:.0f}% · {spinner} {estado}{perfil_txt}"
         )
         self.query_one("#status", Static).update(status)

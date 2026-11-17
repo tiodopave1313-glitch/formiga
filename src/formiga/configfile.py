@@ -83,12 +83,16 @@ _EXTENSIONS_KEYS = {
     "enabled": "extensions_enabled",
     "trusted_projects": "extensions_trusted_projects",
 }
+_PROFILE_KEYS = {
+    "model_hint": "profile_model_hint",
+}
 _SECTIONS = {
     "llm": _LLM_KEYS,
     "search": _SEARCH_KEYS,
     "budget": _BUDGET_KEYS,
     "agent": _AGENT_KEYS,
     "extensions": _EXTENSIONS_KEYS,
+    "profile": _PROFILE_KEYS,
 }
 
 _FLOAT_FIELDS = {"llm_temperature", "llm_timeout", "timeout_seconds", "agent_timeout_seconds"}
@@ -109,7 +113,7 @@ _INT_FIELDS = {
     "tool_schema_tokens",
 }
 _BOOL_FIELDS = {"llm_thinking"}
-_NULLABLE_STR_FIELDS = {"fallback_backend"}
+_NULLABLE_STR_FIELDS = {"fallback_backend", "profile_model_hint"}
 _DEFAULT_NAME = "formiga.toml"
 _GLOBAL_PATH = Path("~/.formiga/config.toml")
 _XDG_PATH = Path("~/.config/formiga/config.toml")
@@ -217,7 +221,15 @@ def load_config_values(path: Path) -> dict[str, object]:
             if not isinstance(settings, dict):
                 raise ConfigError(f"Seção [ext.{ext_name}] inválida em {path}.")
             extension_settings[ext_name] = dict(settings)
-    unknown = set(data) - set(_SECTIONS) - {"ext"}
+    profile_sections = data.get("profiles", {})
+    if profile_sections is not None:
+        if not isinstance(profile_sections, dict):
+            raise ConfigError(f"Seção [profiles] inválida em {path}.")
+        for profile_name, settings in profile_sections.items():
+            if not isinstance(settings, dict):
+                raise ConfigError(f"Seção [profiles.{profile_name}] inválida em {path}.")
+            extension_settings[profile_name] = dict(settings)
+    unknown = set(data) - set(_SECTIONS) - {"ext", "profiles"}
     if unknown:
         raise ConfigError(f"Seções desconhecidas em {path}: {sorted(unknown)}.")
     if extension_settings:

@@ -17,6 +17,7 @@ from formiga.agent.extensions.budget import check_schema_budget, schema_tokens
 from formiga.agent.extensions.discovery import discover_extensions
 from formiga.agent.extensions.registry import ExtensionRegistry
 from formiga.agent.loop import AgentLoop
+from formiga.agent.profiles import Profile, apply_profile, select_profile
 from formiga.agent.session import Session
 from formiga.config import Config
 
@@ -27,6 +28,21 @@ def build_agent(
     on_event: Callable[[str, dict], None] | None = None,
 ) -> AgentLoop:
     """Monta o agente por descoberta de extensões e entrega o registry ao loop."""
+    # Perfil de modelo (seção 9.6 do PRD): aplica defaults do perfil apenas
+    # em campos ainda em default do Formiga; CLI/env/arquivo sobrepõem.
+    user_profiles = {
+        nome: Profile(**settings)
+        for nome, settings in config.profiles.items()
+    }
+    perfil = select_profile(
+        config.model,
+        model_hint=config.profile_model_hint,
+        user_profiles=user_profiles,
+    )
+    if perfil is not None:
+        apply_profile(config, perfil)
+        config.active_profile = perfil.name
+
     chat_client = build_chat_client(config)
     registry = ExtensionRegistry()
 

@@ -59,6 +59,9 @@ ENV_AGENT_TOOL_SCHEMA_TOKENS = "FORMIGA_AGENT_TOOL_SCHEMA_TOKENS"
 DEFAULT_MAX_CONTEXT_TOKENS = 32768
 DEFAULT_TOOL_SCHEMA_TOKENS = 1600
 
+# Perfil de modelo (seção 9.6 do PRD v2).
+ENV_PROFILE_MODEL_HINT = "FORMIGA_PROFILE_MODEL_HINT"
+
 ENV_OPENAI_URL = "FORMIGA_OPENAI_URL"
 ENV_OPENAI_API_KEY_ENV = "FORMIGA_OPENAI_API_KEY_ENV"
 ENV_FALLBACK_BACKEND = "FORMIGA_FALLBACK_BACKEND"
@@ -173,6 +176,11 @@ class Config:
     max_context_tokens: int = DEFAULT_MAX_CONTEXT_TOKENS
     tool_schema_tokens: int = DEFAULT_TOOL_SCHEMA_TOKENS
 
+    # Perfil de modelo (seção 9.6 do PRD v2).
+    profile_model_hint: str | None = None
+    profiles: dict[str, dict[str, object]] = field(default_factory=dict)
+    active_profile: str | None = None
+
     @classmethod
     def from_sources(
         cls,
@@ -268,6 +276,8 @@ class Config:
                     "FORMIGA_AGENT_TOOL_SCHEMA_TOKENS não é um inteiro: "
                     f"{v!r}."
                 ) from exc
+        if (v := _env(env, ENV_PROFILE_MODEL_HINT)) is not None:
+            config = replace(config, profile_model_hint=v)
         config.validate()
         return config
 
@@ -332,6 +342,7 @@ class Config:
             "extensions_enabled",
             "max_context_tokens",
             "tool_schema_tokens",
+            "profile_model_hint",
         ):
             value = getattr(args, key, None)
             if value is not None and value != getattr(self, key):
