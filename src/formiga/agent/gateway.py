@@ -269,7 +269,7 @@ class GatewaySession:
 class Gateway:
     """Servidor WebSocket local: gerencia sessões e faz broadcast de eventos."""
 
-    def __init__(self, cwd: Path | str) -> None:
+    def __init__(self, cwd: Path | str, catchup: str = "skip") -> None:
         self.cwd = Path(cwd).resolve()
         self.server: asyncio.AbstractServer | None = None
         self.sessions: dict[str, GatewaySession] = {}
@@ -280,6 +280,7 @@ class Gateway:
         self.job_store = JobStore()
         self.jobs: dict[str, Job] = {}
         self._scheduler_task: asyncio.Task | None = None
+        self._catchup = catchup
 
     # -- ciclo de vida ------------------------------------------------- #
 
@@ -504,9 +505,10 @@ class Gateway:
             self._scheduler_task.cancel()
         self._scheduler_task = asyncio.create_task(self._scheduler_loop())
 
-    def _processar_jobs_perdidos(self) -> None:
+    def _processar_jobs_perdidos(self, agora: datetime | None = None) -> None:
         """No startup, jobs com next_run perdido → skip (default) ou catchup."""
-        agora = utc_now()
+        if agora is None:
+            agora = utc_now()
         catchup_global = self._config_catchup()
         alterou = False
         for job in self.jobs.values():
@@ -520,8 +522,11 @@ class Gateway:
                 continue  # ainda no futuro
             # Job perdeu o disparo enquanto o gateway estava parado.
             if catchup_global == "once" and job.catchup == "once":
-                # Dispara uma vez agora (catchup).
-                asyncio.create_task(self._run_cron_job(job))
+                # Marca para disparar imediatamente no próximo ciclo do
+                # scheduler (não cria task aqui: pode não haver loop).
+                job.next_run = _iso(agora)
+                job.last_status = "catchup"
+                alterou = True
             else:
                 job.last_status = "skip"
                 job.last_error = "disparo perdido enquanto o gateway estava parado"
@@ -534,9 +539,8 @@ class Gateway:
             self.job_store.save(self.jobs)
 
     def _config_catchup(self) -> str:
-        """Catchup global da config do daemon (não existe no Config ainda;
-        usa o default 'skip' até a CLI gravar [cron].)"""
-        return "skip"
+        """Catchup global do daemon (default 'skip')."""
+        return self._catchup
 
     async def _scheduler_loop(self) -> None:
         """Loop principal do scheduler: dorme até o próximo disparo e executa."""
