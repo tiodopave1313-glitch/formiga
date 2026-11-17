@@ -11,6 +11,9 @@ htmlcov/
 
 smoke-*/
 
+# Sessões de execução geradas pelo agente (transcript, events, messages).
+sessoes/
+
 # Configuração local (pode conter chave de API com permissão 0600).
 formiga.toml
 .env
