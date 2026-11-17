@@ -203,6 +203,15 @@ def build_parser() -> argparse.ArgumentParser:
         "untrust", help="Remove um projeto da allowlist global de extensões."
     )
     untrust.add_argument("caminho", help="Caminho do diretório do projeto.")
+
+    gateway = sub.add_parser(
+        "gateway", help="Gerencia o daemon local do Formiga (Fase 6)."
+    )
+    gateway.add_argument(
+        "acao",
+        choices=["start", "stop", "status"],
+        help="start: inicia o daemon | stop: para | status: mostra o estado.",
+    )
     return parser
 
 
@@ -272,6 +281,16 @@ def main(argv: list[str] | None = None) -> int:
         return _toggle_trust(args.caminho, add=True)
     if args.command == "untrust":
         return _toggle_trust(args.caminho, add=False)
+
+    if args.command == "gateway":
+        from formiga.agent.gateway import gateway_start, gateway_status, gateway_stop
+
+        if args.acao == "start":
+            return gateway_start(Path.cwd())
+        if args.acao == "stop":
+            return gateway_stop(Path.cwd())
+        if args.acao == "status":
+            return gateway_status(Path.cwd())
 
     if args.command == "research":
         if not args.question.strip():
