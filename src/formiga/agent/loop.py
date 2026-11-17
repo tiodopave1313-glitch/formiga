@@ -260,6 +260,10 @@ class AgentLoop:
                 )
 
             # chama o modelo com histórico + schemas das ferramentas
+            # Atualiza turno e expira ferramentas lazy cujo TTL acabou.
+            self.registry.current_turn = self.budget.turns_used
+            self.registry.expire_lazy_tools(self.registry.current_turn)
+
             self.budget.record_llm_call()
             self._emit("llm_call", {"turns": self.budget.turns_used})
             try:
@@ -419,6 +423,13 @@ class AgentLoop:
         if len(text) > cap:
             text = text[:cap] + f"\n…(truncado a {cap} chars)"
         result.text = text
+
+        # Renova TTL de ferramenta lazy ativa ao usar (renovável).
+        reg = self.registry._tools.get(name)
+        if reg is not None and reg.lazy and reg.state == "ativa":
+            self.registry.activate_lazy_tool(
+                name, self.registry.current_turn
+            )
 
         # Hook tool_result: extensões podem transformar o resultado.
         resultado = self.registry.chain(

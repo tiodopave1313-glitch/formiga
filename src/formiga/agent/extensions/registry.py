@@ -6,7 +6,7 @@ Nenhum módulo de extensão concreta é importado daqui.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any
 
 from formiga.agent.extensions.events import CHAIN_EVENTS, OBSERVATION_EVENTS
@@ -30,6 +30,11 @@ class ToolRegistration:
     lazy: bool = False
     cap_chars: int | None = None
     prompt_hint: str | None = None
+    # Estado da ferramenta: "ativa" (em schemas), "latente" (fora dos schemas,
+    # pode ser ativada via activate_tool) ou "expirada" (volta para latente
+    # após TTL sem uso). Não-lazies nascem "ativa".
+    state: str = "ativa"
+    expires_at: int | None = None  # turno em que expira (apenas lazy ativa)
 
 
 @dataclass(frozen=True)
@@ -70,6 +75,7 @@ class ExtensionRegistry:
         self._event_sink: Callable[[str, dict], None] = lambda *_: None
         self._session: Session | None = None
         self.warnings: list[str] = []
+        self.current_turn: int = 0
 
     def bind_runtime(
         self,
@@ -110,6 +116,7 @@ class ExtensionRegistry:
             lazy=lazy,
             cap_chars=cap_chars,
             prompt_hint=prompt_hint,
+            state="latente" if lazy else "ativa",
         )
 
     def register_command(
@@ -208,7 +215,43 @@ class ExtensionRegistry:
 
     @property
     def schemas(self) -> list[dict]:
-        return [item.tool.schema() for item in self._tools.values() if not item.lazy]
+        return [
+            item.tool.schema()
+            for item in self._tools.values()
+            if item.state == "ativa"
+        ]
+
+    @property
+    def tool_states(self) -> dict[str, str]:
+        """Estado de cada ferramenta: ativa/latente/expirada."""
+        return {name: reg.state for name, reg in self._tools.items()}
+
+    def activate_lazy_tool(self, name: str, current_turn: int, ttl: int = 6) -> bool:
+        """Ativa uma ferramenta lazy por `ttl` turnos (renovável ao usar).
+
+        Devolve True se ativou, False se a ferramenta não existe ou não é lazy.
+        """
+        reg = self._tools.get(name)
+        if reg is None or not reg.lazy:
+            return False
+        self._tools[name] = replace(
+            reg, state="ativa", expires_at=current_turn + ttl
+        )
+        return True
+
+    def expire_lazy_tools(self, current_turn: int) -> list[str]:
+        """Expira ferramentas ativas cujo TTL acabou; devolve nomes expirados."""
+        expirados: list[str] = []
+        for name, reg in list(self._tools.items()):
+            if (
+                reg.state == "ativa"
+                and reg.lazy
+                and reg.expires_at is not None
+                and current_turn >= reg.expires_at
+            ):
+                self._tools[name] = replace(reg, state="latente", expires_at=None)
+                expirados.append(name)
+        return expirados
 
     def budget_for(self, name: str) -> int | None:
         registration = self._tools.get(name)
@@ -278,6 +321,11 @@ class ExtensionContext:
         self.name = name
         self.source = source
         self.ui = ExtensionUI(registry)
+
+    @property
+    def registry(self) -> ExtensionRegistry:
+        """Referência ao registry (útil para ferramentas meta como activate_tool)."""
+        return self._registry
 
     def register_tool(
         self,

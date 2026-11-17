@@ -71,6 +71,7 @@ def test_builtin_extensions_registram_todas_as_oito_tools(tmp_path):
         "write",
         "edit",
         "bash",
+        "activate_tool",
         "web_search",
         "web_fetch",
         "deep_search",
