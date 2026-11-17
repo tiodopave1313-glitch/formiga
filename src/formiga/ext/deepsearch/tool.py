@@ -96,7 +96,10 @@ class DeepSearchTool:
         def progress(message: str) -> None:
             events.append(message)
             if self.on_event is not None:
-                self.on_event("deep_search_progress", {"message": message})
+                self.on_event(
+                    "tool_progress",
+                    {"tool": self.name, "message": message},
+                )
 
         try:
             result = self.run_fn(research_config, progress=progress)

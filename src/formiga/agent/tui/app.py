@@ -179,7 +179,7 @@ class AgentApp(App):
                 self._write_tool_line(f"  ✗ erro {duration}".rstrip())
             elif duration:
                 self._write_tool_line(f"  ({duration})")
-        elif event == "deep_search_progress":
+        elif event == "tool_progress":
             self._write_tool_line(f"· {data.get('message', '')}")
         elif event == "run_final":
             if not data.get("streamed"):

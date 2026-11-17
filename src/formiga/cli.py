@@ -336,7 +336,7 @@ def _run_interactive(config: Config, session: Session, args) -> int:
                     sys.stdout.write(f"  ({seconds:.1f} s)")
             sys.stdout.write("\n")
             sys.stdout.flush()
-        elif event == "deep_search_progress":
+        elif event == "tool_progress":
             sys.stdout.write(f"· {data.get('message', '')}\n")
             sys.stdout.flush()
         elif event == "budget":

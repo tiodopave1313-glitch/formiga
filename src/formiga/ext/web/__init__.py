@@ -8,14 +8,15 @@ from formiga.ext.web.tools import WebFetchTool, WebSearchTool
 
 def setup(pi: ExtensionAPI) -> None:
     """Registra as ferramentas web e seus orçamentos por mensagem."""
+    config = pi.runtime_config
     pi.register_tool(
-        WebSearchTool(pi.config),
-        budget_per_message=int(getattr(pi.config, "agent_max_web_searches", 6)),
+        WebSearchTool(config),
+        budget_per_message=int(getattr(config, "agent_max_web_searches", 6)),
         category="web",
     )
     pi.register_tool(
-        WebFetchTool(pi.config),
-        budget_per_message=int(getattr(pi.config, "agent_max_web_fetches", 8)),
+        WebFetchTool(config),
+        budget_per_message=int(getattr(config, "agent_max_web_fetches", 8)),
         category="web",
     )
 
