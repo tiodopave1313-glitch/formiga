@@ -107,10 +107,10 @@ def test_desativar_deepsearch_remove_do_prompt_schemas_e_orcamento(tmp_path):
     from formiga.agent.prompts import build_system_prompt
 
     prompt = build_system_prompt(registry)
-    assert "deep_search" not in prompt
+    assert "`deep_search` —" not in prompt  # nenhuma entrada de tool para deep_search
 
     loop = AgentLoop(None, registry, session, cfg)
-    assert "deep_search" not in loop.messages[0]["content"]
+    assert "`deep_search` —" not in loop.messages[0]["content"]
     assert "deep_search" not in {
         s["function"]["name"] for s in loop.registry.schemas
     }

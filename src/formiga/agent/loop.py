@@ -17,6 +17,14 @@ Eventos para a TUI (via `on_event`):
 - `tool_progress`           — progresso reexposto por uma ferramenta/extensão;
 - `budget`                  — snapshot de turnos/chamadas vs máximos;
 - `interrupted`             — interrupção confirmada pelo loop;
+
+Hooks do registry (seção 6 e 7 do PRD v2):
+- `input`        — transforma/intercepta a pergunta do usuário (chain);
+- `before_agent_start` — contribui seções ao system prompt (chain);
+- `context`      — filtra/windowa mensagens antes da chamada LLM (chain);
+- `tool_call`    — gateia/muta argumentos antes de executar (chain);
+- `tool_result`  — transforma o resultado após executar (chain);
+- `turn_end`     — observa o fim do turno (observe).
 """
 
 from __future__ import annotations
@@ -26,6 +34,7 @@ from collections.abc import Callable
 from time import monotonic
 
 from formiga.agent.chat import AgentCancelled, ChatResponse
+from formiga.agent.extensions.budget import ContextBudget, evict_pairs
 from formiga.agent.extensions.registry import ExtensionRegistry
 from formiga.agent.guardrails import (
     AgentBudget,
@@ -89,10 +98,25 @@ class AgentLoop:
             }
         )
 
+        # Orçamento de janela de contexto (seção 9.1 do PRD).
+        self.context_budget = ContextBudget(
+            max_context_tokens=int(
+                getattr(config, "max_context_tokens", 32768)
+            ),
+        )
+
+        # Seções contribuídas por extensões via before_agent_start.
+        self.secoes_extensao: dict[str, str] = {}
+
         # system prompt montado a partir dos specs do registry — nenhuma
         # ferramenta concreta é citada pelo núcleo.
         self.messages: list[dict] = [
-            {"role": "system", "content": build_system_prompt(registry)}
+            {
+                "role": "system",
+                "content": build_system_prompt(
+                    registry, secoes_extensao=self.secoes_extensao
+                ),
+            }
         ]
 
         # Índice do início do turno de tool ainda não confirmado pelo
@@ -198,6 +222,9 @@ class AgentLoop:
         self.anti_loop = AntiLoop()
         self._pending_len = None  # nenhum turno de tool pendente
 
+        # Hook input: extensões podem transformar a pergunta do usuário.
+        question = self.registry.chain("input", question)
+
         self.messages.append({"role": "user", "content": question})
         self.session.save_messages(self.messages)
         self._agent_section = False
@@ -212,6 +239,25 @@ class AgentLoop:
             limit = self.budget.can_start_turn()
             if limit is not None:
                 return self._final(limit)
+
+            # before_agent_start: extensões contribuem seções ao system prompt.
+            self.secoes_extensao = self.registry.chain(
+                "before_agent_start", dict(self.secoes_extensao)
+            )
+            self.messages[0] = {
+                "role": "system",
+                "content": build_system_prompt(
+                    self.registry, secoes_extensao=self.secoes_extensao
+                ),
+            }
+
+            # context: extensões podem filtrar/windowar mensagens; eviction
+            # padrão se ainda exceder a janela útil (seção 9.1).
+            self.messages = self.registry.chain("context", list(self.messages))
+            if not self.context_budget.coube(self.messages):
+                self.messages = evict_pairs(
+                    self.messages, self.context_budget.max_context_tokens
+                )
 
             # chama o modelo com histórico + schemas das ferramentas
             self.budget.record_llm_call()
@@ -274,6 +320,7 @@ class AgentLoop:
                 self.session.save_messages(self.messages)
                 self.budget.record_turn()
                 self._emit("budget", self._budget_snapshot())
+                self.registry.observe("turn_end", {"turns": self.budget.turns_used})
                 continue
 
             # resposta final sem tool call
@@ -283,6 +330,7 @@ class AgentLoop:
             self._pending_len = None  # turno confirmado: sem rollback
             self.session.append_event("turn_ended", {"turns": self.budget.turns_used})
             self._emit("budget", self._budget_snapshot())
+            self.registry.observe("turn_end", {"turns": self.budget.turns_used})
             self._emit("run_final", {"text": final, "streamed": True})
             return final
 
@@ -330,6 +378,13 @@ class AgentLoop:
                 + "\nResultado não útil; tente outro caminho ou responda."
             )
 
+        # Hook tool_call: extensões podem gatear (block) ou mutar args.
+        args = self.registry.chain("tool_call", args, name=name, tool=tool)
+        if isinstance(args, dict) and args.get("block"):
+            return args.get(
+                "reason", f"chamada bloqueada por extensão: {name}."
+            )
+
         # Orçamento por mensagem declarado pela extensão no registry; nenhuma
         # lista de ferramentas especiais fica hardwired no loop.
         budget_err = self.registry.consume_message_budget(name, self.tool_budgets)
@@ -364,6 +419,15 @@ class AgentLoop:
         if len(text) > cap:
             text = text[:cap] + f"\n…(truncado a {cap} chars)"
         result.text = text
+
+        # Hook tool_result: extensões podem transformar o resultado.
+        resultado = self.registry.chain(
+            "tool_result",
+            {"ok": result.ok, "text": result.text, "error": result.error},
+        )
+        result.ok = resultado.get("ok", result.ok)
+        result.text = resultado.get("text", result.text)
+        result.error = resultado.get("error", result.error)
 
         self.session.append_event(
             "tool_call",
