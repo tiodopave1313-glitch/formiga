@@ -7,18 +7,19 @@ para confirmar o comportamento com um modelo pequeno de verdade.
 
 ## Pré-requisitos
 
-- Chave do NIM em `NVIDIA_API_KEY` (ou `--api-key-env` apontando outra variável).
+- Uma das duas: chave do NIM em `NVIDIA_API_KEY` **ou** Ollama/llama-server local
+  com um modelo 8B (ex.: `Nemotron-3.5-Bolt-E4B` ou `Gemma-4-E4B`).
 - SearXNG local para `web_search`/`deep_search` (ex.: `http://localhost:8080`).
 - Terminal com pelo menos 80×24 (funciona menor, mas este é o alvo).
 
-## 1. Headless (`--print`) fim a fim
+## 1. Headless (`--print`) fim a fim — backend remoto (NIM)
 
 ```bash
 formiga agent --print \
   "Leia formiga.toml, diga qual backend está configurado e pesquise 'Nemotron NVIDIA NIM' na web." \
   --llm-backend openai \
   --llm-base-url https://integrate.api.nvidia.com/v1 \
-  --model nvidia/nemotron-nano-9b-v2 \
+  --model nvidia/nemotron-3.5-bolt-e4b \
   --searxng-url http://localhost:8080
 ```
 
@@ -30,6 +31,8 @@ Verificar:
       durações; o transcript contém toda a conversa em Markdown).
 - [ ] Nenhuma credencial aparece em `messages.json`, `events.jsonl`,
       `transcript.md` ou stdout.
+- [ ] Nenhuma sequência de escape ANSI no stdout (rode com `NO_COLOR=1`
+      e confira a saída limpa).
 
 ## 2. CLI interativa (padrão) com tarefa mista (`bash` + `deep_search`)
 
@@ -38,7 +41,7 @@ formiga agent \
   "Crie o arquivo prova.txt com 'conteudo-smoke' via bash, confirme com read e, se sobrar orçamento, faça um deep_search sobre 'trafilatura extração de conteúdo'." \
   --llm-backend openai \
   --llm-base-url https://integrate.api.nvidia.com/v1 \
-  --model nvidia/nemotron-nano-9b-v2 \
+  --model nvidia/nemotron-3.5-bolt-e4b \
   --searxng-url http://localhost:8080
 ```
 
@@ -50,77 +53,99 @@ Na CLI interativa, verificar (nesta ordem):
       `⚙ bash — command=echo …`, `⚙ read — path=prova.txt`, seguidas de
       duração (`(1.2 s)`); o progresso do `deep_search` aparece como linhas
       `· planejado · buscas · síntese`.
-- [ ] A linha de orçamento reflete o loop real: `turnos n/24 · llm n/120`
-      aparece entre turnos.
+- [ ] A linha de orçamento reflete o loop real: `turnos n/24 · llm n/120 ·`
+      `ctx Xk/Yk · ext N ferramentas` aparece entre turnos.
 - [ ] `Ctrl+C` **durante a resposta** interrompe só o turno atual (parcial salva,
       `— interrompido pelo usuário —` no transcript, volta ao prompt).
 - [ ] `Ctrl+C` **no prompt** sai do programa limpo.
 - [ ] `Ctrl+D` (EOF) no prompt sai apontando o `transcript.md`.
 - [ ] Com `NO_COLOR=1 formiga agent …`, tudo permanece legível.
-- [ ] O relatório do `deep_search` fica em
-      `sessoes/<sessão>/research/<run>/report.md`.
-- [ ] Ao sair (`Ctrl+D`), abrir `sessoes/<sessão>/transcript.md`: ele contém
-      a mesma conversa exibida (perguntas, texto do agent, tools, durações,
-      interrupções) — copiável de qualquer editor.
+- [ ] O relatório do `deep_search` fica em `sessoes/<timestamp>/`.
+- [ ] Comando `/budget` imprime turnos/llm/ctx/ext e consumo por ferramenta.
+- [ ] Comando `/new sim` inicia nova sessão em disco preservando a anterior.
 
-## 3. TUI Textual (opcional, `--tui`, requer `formiga[gui]`)
+## 3. Extensão externa (`.formiga/extensions/` + `formiga trust`)
 
 ```bash
-uv add --extra gui formiga
-formiga agent --tui \
-  "Crie o arquivo prova.txt com 'conteudo-smoke' via bash, confirme com read e, se sobrar orçamento, faça um deep_search sobre 'trafilatura extração de conteúdo'." \
-  --llm-backend openai \
-  --llm-base-url https://integrate.api.nvidia.com/v1 \
-  --model nvidia/nemotron-nano-9b-v2 \
-  --searxng-url http://localhost:8080
+mkdir -p .formiga/extensions
+# copie para .formiga/extensions/minha_ext.py uma extensão com setup(pi) que
+# registre uma tool e/ou um comando /xxx
+formiga trust .
+formiga agent "qualquer pergunta"
 ```
 
-Na TUI, verificar (nesta ordem):
+Verificar:
 
-- [ ] A pergunta aparece pré-preenchida na entrada; Enter inicia.
-- [ ] O texto do agente aparece **enquanto é gerado** (stream token a token).
-- [ ] Cada ferramenta aparece em linha **antes** de executar:
-      `⚙ bash — command=echo …`, `⚙ read — path=prova.txt`, seguidas de
-      duração (`(1.2 s)`); o progresso do `deep_search` aparece como linhas
-      `· planejado · buscas · síntese`.
-- [ ] A barra de status reflete o loop real: `turnos n/24 · chamadas n/120`
-      crescem a cada chamada; a entrada fica desabilitada durante a execução.
-- [ ] `Ctrl+O` abre o overlay com o último resultado de ferramenta (completo,
-      sem cap); `Esc` fecha o overlay.
-- [ ] `Esc` durante a execução muda o estado para `interrompendo? Esc de novo
-      confirma · outra tecla continua`; sem segunda pressão, volta a
-      `executando` (padrão: continuar).
-- [ ] Com `Esc Esc`, o estado final **nunca é "sucesso"**: a resposta é
-      "Interrompido pelo usuário…" e o transcript mostra
-      `— interrompido pelo usuário —`.
-- [ ] `Ctrl+L` alterna rolagem livre; `Ctrl+Q` sai sem perder a sessão.
-- [ ] Com `NO_COLOR=1 formiga agent --tui …`, tudo permanece legível.
-- [ ] O relatório do `deep_search` fica em
-      `sessoes/<sessão>/research/<run>/report.md`.
-- [ ] Ao sair (`Ctrl+Q`), abrir `sessoes/<sessão>/transcript.md`: ele contém
-      a mesma conversa exibida (perguntas, texto do agent, tools, durações,
-      interrupções) — copiável de qualquer editor.
+- [ ] A extensão carrega e aparece em `/ext`.
+- [ ] Sua tool aparece no prompt do sistema e pode ser chamada.
+- [ ] Seu comando `/xxx` responde na CLI.
+- [ ] Um projeto fora de `trusted_projects` **não** carrega a extensão;
+      `formiga trust <caminho>` resolve e a sessão avisa.
 
-## 4. Guardrails com modelo pequeno
-
-Repetir uma instrução que induza loop (ex.: "liste `.` com ls cinco vezes"):
-
-- [ ] Na 2ª chamada idêntica, o modelo recebe o nudge (mensagem "você já
-      chamou … com os mesmos argumentos") e o transcript continua fluido.
-- [ ] Na 4ª, o turno encerra com a resposta parcial e explicação de orçamento.
-
-Esgotar orçamento de web (configurar `agent_max_web_searches = 1` no
-`formiga.toml`, seção `[agent]`, e pedir duas buscas):
-
-- [ ] A 2ª `web_search` não executa; o modelo recebe `ERRO: orçamento de
-      web_search esgotado (1 por mensagem)` e responde com o que tem.
-
-## 5. Anti-regressão rápida
+## 4. Perfis de modelo
 
 ```bash
-uv run pytest          # 320+ testes offline, sem rede nem modelo
-uv run ruff check src/ tests/
+formiga agent "pergunta curta" --profile gemma4-e4b
+formiga agent "pergunta curta" --profile nemotron-3.5-bolt-e4b
 ```
 
-Se algum item falhar, registrar o caso em `sessoes/<sessão>/` (artefatos
-já capturam o estado) e reproducir offline com um fake antes de corrigir.
+Verificar:
+
+- [ ] A barra de status da TUI exibe o perfil selecionado (`perfil X`).
+- [ ] A auto-seleção por nome funciona (`model_hint = "gemma4"` → `gemma4-e4b`).
+- [ ] O perfil `gemma4-e4b` usa `thinking = false`; o `nemotron-3.5-bolt-e4b`
+      usa `thinking = true`.
+
+## 5. Local: Gemma 4 E4B via llama-server (documentado; executar manualmente)
+
+Receita (llama-server deve estar compilado em `~/llama.cpp/build/bin/`):
+
+```bash
+# 1. Baixe o GGUF (ex.: Gemma-4-E4B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf)
+# 2. Suba o servidor:
+~/llama.cpp/build/bin/llama-server -m Gemma-4-E4B-*.gguf \
+  --alias gemma4 -c 32768 --jinja --reasoning off
+
+# 3. Rode o agent contra o backend local:
+formiga agent "resuma o arquivo formiga.toml" \
+  --llm-backend llamacpp \
+  --llamacpp-url http://127.0.0.1:8080 \
+  --model gemma4
+```
+
+Verificar:
+
+- [ ] O perfil `gemma4-e4b` é auto-selecionado pelo nome `gemma4`.
+- [ ] A resposta é gerada localmente (sem chave de API remota).
+- [ ] A barra de status exibe `ctx` compatível com a janela de 32K do perfil.
+
+## 6. TUI (`--tui`) — conferência visual manual
+
+```bash
+NO_COLOR=1 formiga agent --tui "qualquer pergunta"
+```
+
+Verificar (80×24):
+
+- [ ] A barra de status exibe `turnos X/Y · chamadas X/Y · ctx Xk/Yk · ext N
+      ferramentas · perfil X` e nunca excede 80 colunas.
+- [ ] Eventos de extensão (`notification`, `extension_status`,
+      `tool_progress`) aparecem em linha.
+- [ ] `Esc` pede confirmação para interromper; segunda `Esc` confirma.
+- [ ] `Ctrl+C` durante a resposta interrompe só o turno atual.
+- [ ] O estado final nunca é "sucesso" após interrupção.
+- [ ] Comandos `/tools`, `/ext`, `/budget`, `/new` funcionam.
+
+## Aceite (marcar ao terminar)
+
+- [ ] `formiga agent --print` responde com o modelo real (NIM ou local).
+- [ ] Linha de orçamento imprime `ctx` e `ext`; `/budget` coerente com o loop.
+- [ ] `pi.emit` de extensão chega à CLI e à TUI.
+- [ ] Extensão externa carrega, aparece em `/ext`, tool e comando funcionam.
+- [ ] `/new sim` cria sessão preservando a anterior.
+- [ ] `NO_COLOR=1` sem sequências ANSI; 80×24 respeitado.
+- [ ] `Ctrl+C`/`Esc` cooperativo; estado final correto.
+- [ ] Nenhuma credencial em `messages.json`, `events.jsonl`, `transcript.md`
+      nem stdout.
+
+Esse teste demonstra integração, **não comprova qualidade factual**.
