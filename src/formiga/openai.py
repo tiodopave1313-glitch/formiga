@@ -30,6 +30,8 @@ from collections.abc import Callable
 
 import httpx
 
+from formiga.agent.chat import ChatResponse, DeltaCallback, ToolCall
+from formiga.agent.stream import consume_sse_chat_stream
 from formiga.config import Config, ConfigError
 from formiga.llm import LLMError, LLMResponse
 
@@ -174,6 +176,29 @@ class OpenAIClient:
         ) as client:
             return client.post(self._endpoint(), json=payload, headers=headers)
 
+    def _request_stream(self, payload: dict) -> tuple[httpx.Client, httpx.Response]:
+        """Chamada streaming; devolve (client, response) — fechar ambos após uso.
+
+        O client precisa permanecer aberto enquanto o stream é consumido;
+        quem consome fecha response e client (em qualquer ordem).
+        """
+        headers = {
+            "Authorization": f"Bearer {self._api_key}",
+            "Accept": "text/event-stream",
+        }
+        client = httpx.Client(
+            timeout=self._effective_timeout(), transport=self._transport
+        )
+        request = client.build_request(
+            "POST", self._endpoint(), json=payload, headers=headers
+        )
+        try:
+            response = client.send(request, stream=True)
+        except httpx.HTTPError:
+            client.close()
+            raise
+        return client, response
+
     @staticmethod
     def _retry_delay(response: httpx.Response, attempt: int) -> float:
         retry_after = response.headers.get("Retry-After")
@@ -183,6 +208,174 @@ class OpenAIClient:
             except ValueError:
                 pass
         return min(DEFAULT_BACKOFF_SECONDS * (2 ** (attempt - 1)), MAX_BACKOFF_SECONDS)
+
+    def chat(
+        self,
+        messages: list[dict],
+        tools: list[dict] | None = None,
+        max_tokens: int | None = None,
+        on_delta: DeltaCallback | None = None,
+    ) -> ChatResponse:
+        """Chat com histórico e (opcional) chamadas de ferramenta.
+
+        Sem `tools`, o modelo responde com texto. Com `tools`, pode emitir
+        `tool_calls` no lugar do texto (uma por iteração no MVP). Com
+        `on_delta`, usa streaming e entrega pedaços de texto em tempo real.
+        """
+        if on_delta is not None:
+            return self._chat_stream(messages, tools, max_tokens, on_delta)
+        with_format = False  # tool calls já são restritos pelo schema do backend
+        with_thinking = self.thinking
+        attempt = 0
+        while True:
+            attempt += 1
+            payload = self._chat_payload(
+                messages, tools, max_tokens, with_format, with_thinking
+            )
+            try:
+                response = self._request(payload)
+            except httpx.HTTPError as exc:
+                raise OpenAIError(f"Falha ao chamar o endpoint remoto: {exc}") from exc
+            status = response.status_code
+            if status in RETRYABLE_STATUSES and attempt <= self.max_retries:
+                delay = self._retry_delay(response, attempt)
+                if self.on_retry is not None:
+                    self.on_retry(status, attempt, delay)
+                time.sleep(delay)
+                continue
+            body = response.content.lower()
+            if status == 400 and with_thinking and (
+                b"chat_template_kwargs" in body
+                or b"skip_special_tokens" in body
+                or b"thinking" in body
+            ):
+                with_thinking = False
+                continue
+            if status >= 400:
+                raise OpenAIError(f"HTTP {status} do endpoint remoto: {_snippet(response)}")
+            try:
+                data = response.json()
+            except ValueError as exc:
+                raise OpenAIError(f"Resposta não-JSON do endpoint remoto: {exc}") from exc
+            return self._parse_chat(data)
+
+    def _chat_stream(
+        self,
+        messages: list[dict],
+        tools: list[dict] | None,
+        max_tokens: int | None,
+        on_delta: DeltaCallback,
+    ) -> ChatResponse:
+        """Variante streaming com o mesmo tratamento de retry/thinking-400."""
+        with_thinking = self.thinking
+        attempt = 0
+        while True:
+            attempt += 1
+            payload = self._chat_payload(messages, tools, max_tokens, False, with_thinking)
+            payload["stream"] = True
+            try:
+                client, response = self._request_stream(payload)
+            except httpx.HTTPError as exc:
+                raise OpenAIError(f"Falha ao chamar o endpoint remoto: {exc}") from exc
+            try:
+                status = response.status_code
+                delay = 0.0
+                action_retry = False
+                if status in RETRYABLE_STATUSES and attempt <= self.max_retries:
+                    delay = self._retry_delay(response, attempt)
+                    if self.on_retry is not None:
+                        self.on_retry(status, attempt, delay)
+                    action_retry = True
+                elif status == 400 and with_thinking:
+                    body = self._lower_body(response)
+                    if (
+                        b"chat_template_kwargs" in body
+                        or b"skip_special_tokens" in body
+                        or b"thinking" in body
+                    ):
+                        with_thinking = False
+                        action_retry = True
+                    else:
+                        action_retry = False
+                        raise OpenAIError(
+                            f"HTTP 400 do endpoint remoto: {_snippet(response)}"
+                        )
+                elif status >= 400:
+                    raise OpenAIError(f"HTTP {status} do endpoint remoto: {_snippet(response)}")
+                else:
+                    action_retry = False
+            except BaseException:
+                response.close()
+                client.close()
+                raise
+            if action_retry:
+                response.close()
+                client.close()
+                time.sleep(delay)
+                continue
+            try:
+                return consume_sse_chat_stream(response, on_delta, OpenAIError)
+            finally:
+                response.close()
+                client.close()
+
+    @staticmethod
+    def _lower_body(response: httpx.Response) -> bytes:
+        """Corpo da resposta em minúsculas; lê o stream apenas se necessário."""
+        if not response.is_stream_consumed:
+            response.read()
+        return response.content.lower()
+
+    def _chat_payload(
+        self,
+        messages: list[dict],
+        tools: list[dict] | None,
+        max_tokens: int | None,
+        with_format: bool,
+        with_thinking: bool = False,
+    ) -> dict:
+        payload: dict = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": self.temperature,
+            "top_p": 0.95,
+            "stream": False,
+        }
+        if max_tokens is not None:
+            payload["max_tokens"] = max_tokens
+        if tools:
+            payload["tools"] = tools
+            payload["tool_choice"] = "auto"
+        if with_thinking:
+            payload["chat_template_kwargs"] = {"enable_thinking": True}
+            payload["skip_special_tokens"] = False
+        return payload
+
+    @staticmethod
+    def _parse_chat(data: dict) -> ChatResponse:
+        try:
+            choice = data["choices"][0]
+            message = choice["message"]
+        except (KeyError, IndexError, TypeError) as exc:
+            raise OpenAIError(f"Resposta do endpoint remoto sem conteúdo: {data!r}") from exc
+        content = message.get("content")
+        tool_calls_raw = message.get("tool_calls")
+        truncated = choice.get("finish_reason") == "length"
+        tool_calls: list[ToolCall] | None = None
+        if tool_calls_raw:
+            tool_calls = [
+                ToolCall(
+                    id=tc.get("id", ""),
+                    name=tc.get("function", {}).get("name", ""),
+                    arguments=tc.get("function", {}).get("arguments", "{}"),
+                )
+                for tc in tool_calls_raw
+            ]
+        return ChatResponse(
+            content=content if isinstance(content, str) else None,
+            tool_calls=tool_calls,
+            truncated=truncated,
+        )
 
     @staticmethod
     def _parse(data: dict) -> LLMResponse:

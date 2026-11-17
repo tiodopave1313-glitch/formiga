@@ -41,6 +41,27 @@ ENV_LLAMACPP_URL = "FORMIGA_LLAMACPP_URL"
 ENV_LLAMACPP_THINKING = "FORMIGA_LLAMACPP_THINKING"
 ENV_LLM_THINKING = "FORMIGA_LLM_THINKING"
 
+# Seção [agent] do formiga.toml (harness agêntico, docs/prd_agent.md).
+ENV_AGENT_MAX_TURNS = "FORMIGA_AGENT_MAX_TURNS"
+ENV_AGENT_MAX_LLM_CALLS = "FORMIGA_AGENT_MAX_LLM_CALLS"
+ENV_AGENT_TIMEOUT_SECONDS = "FORMIGA_AGENT_TIMEOUT_SECONDS"
+ENV_AGENT_MAX_DEEP_SEARCHES = "FORMIGA_AGENT_MAX_DEEP_SEARCHES"
+ENV_AGENT_MAX_WEB_SEARCHES = "FORMIGA_AGENT_MAX_WEB_SEARCHES"
+ENV_AGENT_MAX_WEB_FETCHES = "FORMIGA_AGENT_MAX_WEB_FETCHES"
+ENV_AGENT_TOOL_RESULT_CHARS = "FORMIGA_AGENT_TOOL_RESULT_CHARS"
+ENV_AGENT_WORKDIR = "FORMIGA_AGENT_WORKDIR"
+ENV_EXTENSIONS_ENABLED = "FORMIGA_EXTENSIONS_ENABLED"
+DEFAULT_ENABLED_EXTENSIONS = ("core", "web", "deepsearch")
+
+# Janela de contexto e orçamento de schemas (seção 9 do PRD v2).
+ENV_AGENT_MAX_CONTEXT_TOKENS = "FORMIGA_AGENT_MAX_CONTEXT_TOKENS"
+ENV_AGENT_TOOL_SCHEMA_TOKENS = "FORMIGA_AGENT_TOOL_SCHEMA_TOKENS"
+DEFAULT_MAX_CONTEXT_TOKENS = 32768
+DEFAULT_TOOL_SCHEMA_TOKENS = 1600
+
+# Perfil de modelo (seção 9.6 do PRD v2).
+ENV_PROFILE_MODEL_HINT = "FORMIGA_PROFILE_MODEL_HINT"
+
 ENV_OPENAI_URL = "FORMIGA_OPENAI_URL"
 ENV_OPENAI_API_KEY_ENV = "FORMIGA_OPENAI_API_KEY_ENV"
 ENV_FALLBACK_BACKEND = "FORMIGA_FALLBACK_BACKEND"
@@ -138,6 +159,28 @@ class Config:
     llm_timeout: float = DEFAULT_LLM_TIMEOUT
     llm_temperature: float = DEFAULT_LLM_TEMPERATURE
 
+    # Harness agêntico (seção 9 do PRD docs/prd_agent.md).
+    agent_max_turns: int = 24
+    agent_max_llm_calls: int = 120
+    agent_timeout_seconds: float = 1800.0
+    agent_max_deep_searches: int = 2
+    agent_max_web_searches: int = 6
+    agent_max_web_fetches: int = 8
+    agent_tool_result_chars: int = 4000
+    agent_workdir: str = "."
+    extensions_enabled: tuple[str, ...] = DEFAULT_ENABLED_EXTENSIONS
+    extensions_trusted_projects: tuple[str, ...] = ()
+    extension_settings: dict[str, dict[str, object]] = field(default_factory=dict)
+
+    # Janela de contexto e orçamento de schemas (seção 9 do PRD v2).
+    max_context_tokens: int = DEFAULT_MAX_CONTEXT_TOKENS
+    tool_schema_tokens: int = DEFAULT_TOOL_SCHEMA_TOKENS
+
+    # Perfil de modelo (seção 9.6 do PRD v2).
+    profile_model_hint: str | None = None
+    profiles: dict[str, dict[str, object]] = field(default_factory=dict)
+    active_profile: str | None = None
+
     @classmethod
     def from_sources(
         cls,
@@ -195,6 +238,46 @@ class Config:
                 raise ConfigError(
                     f"FORMIGA_LLM_TEMPERATURE não é um número: {temperature!r}."
                 ) from exc
+        # Seção [agent]
+        if (v := _env(env, ENV_AGENT_MAX_TURNS)) is not None:
+            config = replace(config, agent_max_turns=int(v))
+        if (v := _env(env, ENV_AGENT_MAX_LLM_CALLS)) is not None:
+            config = replace(config, agent_max_llm_calls=int(v))
+        if (v := _env(env, ENV_AGENT_TIMEOUT_SECONDS)) is not None:
+            config = replace(config, agent_timeout_seconds=float(v))
+        if (v := _env(env, ENV_AGENT_MAX_DEEP_SEARCHES)) is not None:
+            config = replace(config, agent_max_deep_searches=int(v))
+        if (v := _env(env, ENV_AGENT_MAX_WEB_SEARCHES)) is not None:
+            config = replace(config, agent_max_web_searches=int(v))
+        if (v := _env(env, ENV_AGENT_MAX_WEB_FETCHES)) is not None:
+            config = replace(config, agent_max_web_fetches=int(v))
+        if (v := _env(env, ENV_AGENT_TOOL_RESULT_CHARS)) is not None:
+            config = replace(config, agent_tool_result_chars=int(v))
+        if (v := _env(env, ENV_AGENT_WORKDIR)) is not None:
+            config = replace(config, agent_workdir=v)
+        if (v := _env(env, ENV_EXTENSIONS_ENABLED)) is not None:
+            config = replace(
+                config,
+                extensions_enabled=tuple(name.strip() for name in v.split(",") if name.strip()),
+            )
+        if (v := _env(env, ENV_AGENT_MAX_CONTEXT_TOKENS)) is not None:
+            try:
+                config = replace(config, max_context_tokens=int(v))
+            except ValueError as exc:
+                raise ConfigError(
+                    "FORMIGA_AGENT_MAX_CONTEXT_TOKENS não é um inteiro: "
+                    f"{v!r}."
+                ) from exc
+        if (v := _env(env, ENV_AGENT_TOOL_SCHEMA_TOKENS)) is not None:
+            try:
+                config = replace(config, tool_schema_tokens=int(v))
+            except ValueError as exc:
+                raise ConfigError(
+                    "FORMIGA_AGENT_TOOL_SCHEMA_TOKENS não é um inteiro: "
+                    f"{v!r}."
+                ) from exc
+        if (v := _env(env, ENV_PROFILE_MODEL_HINT)) is not None:
+            config = replace(config, profile_model_hint=v)
         config.validate()
         return config
 
@@ -248,6 +331,18 @@ class Config:
             "network_timeout",
             "llm_timeout",
             "llm_temperature",
+            "agent_max_turns",
+            "agent_max_llm_calls",
+            "agent_timeout_seconds",
+            "agent_max_deep_searches",
+            "agent_max_web_searches",
+            "agent_max_web_fetches",
+            "agent_tool_result_chars",
+            "agent_workdir",
+            "extensions_enabled",
+            "max_context_tokens",
+            "tool_schema_tokens",
+            "profile_model_hint",
         ):
             value = getattr(args, key, None)
             if value is not None and value != getattr(self, key):
@@ -273,6 +368,15 @@ class Config:
             ("no_progress_rounds", self.no_progress_rounds),
             ("format_retries", self.format_retries),
             ("max_http_bytes", self.max_http_bytes),
+            ("agent_max_turns", self.agent_max_turns),
+            ("agent_max_llm_calls", self.agent_max_llm_calls),
+            ("agent_timeout_seconds", self.agent_timeout_seconds),
+            ("agent_max_deep_searches", self.agent_max_deep_searches),
+            ("agent_max_web_searches", self.agent_max_web_searches),
+            ("agent_max_web_fetches", self.agent_max_web_fetches),
+            ("agent_tool_result_chars", self.agent_tool_result_chars),
+            ("max_context_tokens", self.max_context_tokens),
+            ("tool_schema_tokens", self.tool_schema_tokens),
         )
         for name, value in int_fields:
             _positive_int(name, value)
@@ -309,6 +413,13 @@ class Config:
         ):
             if not (url.startswith("http://") or url.startswith("https://")):
                 raise ConfigError(f"{name} deve ser uma URL http(s): {url!r}.")
+        if not isinstance(self.extensions_enabled, (tuple, list)) or any(
+            not isinstance(name, str) or not name.strip()
+            for name in self.extensions_enabled
+        ):
+            raise ConfigError("extensions_enabled deve ser uma lista de nomes não vazios.")
+        if len(set(self.extensions_enabled)) != len(self.extensions_enabled):
+            raise ConfigError("extensions_enabled não pode conter nomes duplicados.")
         if self.llm_backend not in LLM_BACKENDS:
             raise ConfigError(
                 f"llm_backend inválido: {self.llm_backend!r} (use um de {LLM_BACKENDS})."

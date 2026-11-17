@@ -6,10 +6,12 @@ Tokens são registrados quando o backend os fornece; caso contrário, `unknown`.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 
 import httpx
 
+from formiga.agent.chat import ChatResponse, DeltaCallback, ToolCall
 from formiga.config import Config
 from formiga.llm import LLMError, LLMResponse
 
@@ -97,5 +99,142 @@ class OllamaClient:
         truncated = data.get("done_reason") == "length"
         return LLMResponse(
             content=content, tokens=tokens if isinstance(tokens, int) else None,
+            truncated=truncated,
+        )
+
+    def chat(
+        self,
+        messages: list[dict],
+        tools: list[dict] | None = None,
+        max_tokens: int | None = None,
+        on_delta: DeltaCallback | None = None,
+    ) -> ChatResponse:
+        """Chat com histórico e (opcional) chamadas de ferramenta no Ollama.
+
+        Com `on_delta`, usa streaming NDJSON e entrega pedaços de texto em
+        tempo real (a resposta final continua completa).
+        """
+        payload: dict = {
+            "model": self.model,
+            "messages": messages,
+            "options": {
+                "temperature": self.temperature,
+                "top_k": 64,
+                "top_p": 0.95,
+            },
+        }
+        if on_delta is not None:
+            payload["stream"] = True
+        else:
+            payload["stream"] = False
+        if tools:
+            payload["tools"] = tools
+        if self.think:
+            payload["think"] = True
+        if max_tokens is not None:
+            payload["options"]["num_predict"] = max_tokens
+        try:
+            with httpx.Client(
+                timeout=self._effective_timeout(), transport=self._transport
+            ) as client:
+                if on_delta is None:
+                    response = client.post(f"{self.url}/api/chat", json=payload)
+                else:
+                    request = client.build_request("POST", f"{self.url}/api/chat", json=payload)
+                    response = client.send(request, stream=True)
+                if response.status_code == 400 and self.think:
+                    body = response.text.lower()
+                    if "think" in body:
+                        self.think = False
+                        del payload["think"]
+                        if on_delta is not None:
+                            response.close()
+                        response = client.post(f"{self.url}/api/chat", json=payload)
+                response.raise_for_status()
+                if on_delta is None:
+                    data = response.json()
+                else:
+                    try:
+                        return self._consume_chat_stream(response, on_delta)
+                    finally:
+                        response.close()
+        except httpx.HTTPError as exc:
+            raise OllamaError(f"Falha ao chamar o Ollama: {exc}") from exc
+        except ValueError as exc:
+            raise OllamaError(f"Resposta não-JSON do Ollama: {exc}") from exc
+        try:
+            message = data["message"]
+        except (KeyError, TypeError) as exc:
+            raise OllamaError(f"Resposta do Ollama sem mensagem: {data!r}") from exc
+        content = message.get("content")
+        tool_calls_raw = message.get("tool_calls")
+        truncated = data.get("done_reason") == "length"
+        tool_calls: list[ToolCall] | None = None
+        if tool_calls_raw:
+            tool_calls = [
+                ToolCall(
+                    id=tc.get("id", ""),
+                    name=tc.get("function", {}).get("name", ""),
+                    arguments=tc.get("function", {}).get("arguments", "{}"),
+                )
+                for tc in tool_calls_raw
+            ]
+        return ChatResponse(
+            content=content if isinstance(content, str) else None,
+            tool_calls=tool_calls,
+            truncated=truncated,
+        )
+
+    def _consume_chat_stream(
+        self, response: httpx.Response, on_delta: DeltaCallback
+    ) -> ChatResponse:
+        """Lê o stream NDJSON do Ollama e monta a resposta acumulada.
+
+        Cada linha é um JSON com `message` parcial e `done` final. Tool calls
+        chegam completos por chunk — acumulados por índice de aparição.
+        """
+        content_parts: list[str] = []
+        tool_calls_acc: list[dict] = []
+        truncated = False
+        try:
+            for line in response.iter_lines():
+                if not line.strip():
+                    continue
+                try:
+                    event = json.loads(line)
+                except ValueError as exc:
+                    raise OllamaError(f"Linha NDJSON inválida do Ollama: {exc}") from exc
+                if event.get("done_reason") == "length":
+                    truncated = True
+                message = event.get("message") or {}
+                piece = message.get("content")
+                if isinstance(piece, str) and piece:
+                    content_parts.append(piece)
+                    on_delta(piece)
+                for tc in message.get("tool_calls") or []:
+                    function = tc.get("function") or {}
+                    tool_calls_acc.append(
+                        {
+                            "id": tc.get("id", ""),
+                            "name": function.get("name", ""),
+                            "arguments": function.get("arguments", "{}"),
+                        }
+                    )
+        except httpx.HTTPError as exc:
+            raise OllamaError(f"Falha ao ler o stream do Ollama: {exc}") from exc
+        tool_calls: list[ToolCall] | None = None
+        if tool_calls_acc:
+            tool_calls = [
+                ToolCall(
+                    id=acc["id"],
+                    name=acc["name"],
+                    arguments=acc["arguments"] if isinstance(acc["arguments"], str) else "{}",
+                )
+                for acc in tool_calls_acc
+            ]
+        content = "".join(content_parts)
+        return ChatResponse(
+            content=content if content else None,
+            tool_calls=tool_calls,
             truncated=truncated,
         )

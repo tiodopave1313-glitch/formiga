@@ -67,20 +67,121 @@ _BUDGET_KEYS = {
     "max_llm_calls": "max_llm_calls",
     "timeout_seconds": "timeout_seconds",
 }
-_SECTIONS = {"llm": _LLM_KEYS, "search": _SEARCH_KEYS, "budget": _BUDGET_KEYS}
+_AGENT_KEYS = {
+    "max_turns": "agent_max_turns",
+    "max_llm_calls": "agent_max_llm_calls",
+    "timeout_seconds": "agent_timeout_seconds",
+    "max_deep_searches": "agent_max_deep_searches",
+    "max_web_searches": "agent_max_web_searches",
+    "max_web_fetches": "agent_max_web_fetches",
+    "tool_result_chars": "agent_tool_result_chars",
+    "workdir": "agent_workdir",
+    "max_context_tokens": "max_context_tokens",
+    "tool_schema_tokens": "tool_schema_tokens",
+}
+_EXTENSIONS_KEYS = {
+    "enabled": "extensions_enabled",
+    "trusted_projects": "extensions_trusted_projects",
+}
+_PROFILE_KEYS = {
+    "model_hint": "profile_model_hint",
+}
+_SECTIONS = {
+    "llm": _LLM_KEYS,
+    "search": _SEARCH_KEYS,
+    "budget": _BUDGET_KEYS,
+    "agent": _AGENT_KEYS,
+    "extensions": _EXTENSIONS_KEYS,
+    "profile": _PROFILE_KEYS,
+}
 
-_FLOAT_FIELDS = {"llm_temperature", "llm_timeout", "timeout_seconds"}
+_FLOAT_FIELDS = {"llm_temperature", "llm_timeout", "timeout_seconds", "agent_timeout_seconds"}
 _INT_FIELDS = {
     "max_searches",
     "max_pages",
     "max_llm_calls",
     "llm_max_retries",
     "fallback_after_failures",
+    "agent_max_turns",
+    "agent_max_llm_calls",
+    "agent_timeout_seconds",
+    "agent_max_deep_searches",
+    "agent_max_web_searches",
+    "agent_max_web_fetches",
+    "agent_tool_result_chars",
+    "max_context_tokens",
+    "tool_schema_tokens",
 }
 _BOOL_FIELDS = {"llm_thinking"}
-_NULLABLE_STR_FIELDS = {"fallback_backend"}
+_NULLABLE_STR_FIELDS = {"fallback_backend", "profile_model_hint"}
 _DEFAULT_NAME = "formiga.toml"
+_GLOBAL_PATH = Path("~/.formiga/config.toml")
 _XDG_PATH = Path("~/.config/formiga/config.toml")
+
+
+def global_config_path() -> Path:
+    """Caminho do arquivo de configuração global (~/.formiga/config.toml)."""
+    return _GLOBAL_PATH.expanduser()
+
+
+def read_global_config() -> dict[str, object]:
+    """Lê ~/.formiga/config.toml; devolve `{}` quando não existe."""
+    path = global_config_path()
+    if not path.is_file():
+        return {}
+    try:
+        with path.open("rb") as fh:
+            return tomllib.load(fh)
+    except tomllib.TOMLDecodeError as exc:
+        raise ConfigError(f"TOML inválido em {path}: {exc}") from exc
+
+
+def _toml_dump_value(value: object) -> str:
+    """Serializa um valor TOML simples (str, int, float, bool, lista de str)."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        return repr(value)
+    if isinstance(value, str):
+        return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    if isinstance(value, list):
+        return "[" + ", ".join(_toml_dump_value(item) for item in value) + "]"
+    raise ValueError(f"valor não serializável para TOML: {value!r}")
+
+
+def write_global_config(data: dict[str, object]) -> None:
+    """Escreve ~/.formiga/config.toml (cria o diretório quando necessário).
+
+    Suporta sub-tabelas aninhadas (`[secao.chave]`) e arrays de tabelas
+    (`[[secao.chave]]`), que aparecem em config globais pré-existentes.
+    """
+    path = global_config_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    linhas: list[str] = []
+    for secao, bloco in data.items():
+        if not isinstance(bloco, dict):
+            continue
+        linhas.append(f"[{secao}]")
+        for chave, valor in bloco.items():
+            if isinstance(valor, dict):
+                linhas.append(f"[{secao}.{chave}]")
+                for subchave, subvalor in valor.items():
+                    linhas.append(f"{subchave} = {_toml_dump_value(subvalor)}")
+                linhas.append("")
+            elif isinstance(valor, list) and valor and all(
+                isinstance(i, dict) for i in valor
+            ):
+                for item in valor:
+                    linhas.append(f"[[{secao}.{chave}]]")
+                    for subchave, subvalor in item.items():
+                        linhas.append(f"{subchave} = {_toml_dump_value(subvalor)}")
+                    linhas.append("")
+            else:
+                linhas.append(f"{chave} = {_toml_dump_value(valor)}")
+        linhas.append("")
+    path.write_text("\n".join(linhas) + "\n", encoding="utf-8")
 
 
 def find_config_file(
@@ -117,6 +218,7 @@ def load_config_values(path: Path) -> dict[str, object]:
         raise ConfigError(f"TOML inválido em {path}: {exc}") from exc
 
     values: dict[str, object] = {}
+    extension_settings: dict[str, dict[str, object]] = {}
     for section, mapping in _SECTIONS.items():
         block = data.get(section)
         if block is None:
@@ -129,9 +231,27 @@ def load_config_values(path: Path) -> dict[str, object]:
                 raise ConfigError(f"Chave desconhecida [{section}].{key} em {path}.")
             _check_type(name, value, path)
             values[name] = value
-    unknown = set(data) - set(_SECTIONS)
+    ext_sections = data.get("ext", {})
+    if ext_sections is not None:
+        if not isinstance(ext_sections, dict):
+            raise ConfigError(f"Seção [ext] inválida em {path}.")
+        for ext_name, settings in ext_sections.items():
+            if not isinstance(settings, dict):
+                raise ConfigError(f"Seção [ext.{ext_name}] inválida em {path}.")
+            extension_settings[ext_name] = dict(settings)
+    profile_sections = data.get("profiles", {})
+    if profile_sections is not None:
+        if not isinstance(profile_sections, dict):
+            raise ConfigError(f"Seção [profiles] inválida em {path}.")
+        for profile_name, settings in profile_sections.items():
+            if not isinstance(settings, dict):
+                raise ConfigError(f"Seção [profiles.{profile_name}] inválida em {path}.")
+            extension_settings[profile_name] = dict(settings)
+    unknown = set(data) - set(_SECTIONS) - {"ext", "profiles"}
     if unknown:
         raise ConfigError(f"Seções desconhecidas em {path}: {sorted(unknown)}.")
+    if extension_settings:
+        values["extension_settings"] = extension_settings
     if "openai_api_key" in values and os.name == "posix":
         _check_api_key_permissions(path)
     return values
@@ -148,7 +268,9 @@ def load_file_values(
 
 
 def _check_type(name: str, value: object, path: Path) -> None:
-    if name in _FLOAT_FIELDS:
+    if name in {"extensions_enabled", "extensions_trusted_projects"}:
+        ok = isinstance(value, list) and all(isinstance(item, str) for item in value)
+    elif name in _FLOAT_FIELDS:
         ok = isinstance(value, (int, float)) and not isinstance(value, bool)
     elif name in _INT_FIELDS:
         ok = isinstance(value, int) and not isinstance(value, bool)
