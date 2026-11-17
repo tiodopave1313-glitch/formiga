@@ -76,3 +76,9 @@ max_web_searches = 6
 max_web_fetches = 8
 tool_result_chars = 4000
 workdir = "."
+
+[cron]
+# Catchup quando o gateway está parado na hora marcada: "skip" (default) ou "once".
+catchup = "skip"
+# Fuso dos schedules; None = fuso do sistema.
+tz = "America/Sao_Paulo"

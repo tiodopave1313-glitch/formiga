@@ -67,6 +67,31 @@ e este projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 - `turn_done` garantido mesmo quando o loop de um turno falha.
 - 378 testes verdes (incluindo 11 de aceitação do gateway) + `ruff check` limpo.
 
+## [0.3.0a1] — 2026-11-17
+
+### Fase 7 — Tarefas agendadas (cron) (PRD §12)
+
+- `cron.py`: dataclass `Job` (id, prompt, schedule, enabled, model/profile,
+  orçamento override, catchup, tz, next_run/last_run/last_status/last_error);
+  `JobStore` com persistência atômica em `~/.formiga/jobs.json`;
+  `Schedule` com parser cron 5 campos (croniter), `every N[mhd]` e
+  `at <ISO-8601>`; `next_run` com relógio injetável (`now_fn`) para testes
+  determinísticos; one-shot `at` no passado não se repete.
+- Scheduler no daemon (`gateway.py`): task asyncio dispara jobs no horário,
+  cria sessão nova em `sessoes/cron/<job>/<timestamp>/` com contexto (data,
+  cwd) e orçamento do job; eventos `job_start`/`job_end` (PRD §7.2);
+  gateway parado na hora → `skip` (default) ou `catchup: once` (roda 1× ao
+  voltar); exceções de turno isoladas (não derrubam o daemon).
+- CLI: `formiga cron add|list|rm|enable|disable|run <id>`; `run` é
+  in-process (offline, sem depender do daemon); `[cron] catchup/tz` no
+  `formiga.toml`; env `FORMIGA_CRON_CATCHUP` / `FORMIGA_CRON_TZ`.
+- `/cron` registrado na fábrica (ao lado de `/tools` `/ext` `/budget` `/new`);
+  comandos `/` anexados ao gateway despacham via ação `command` →
+  `command_result` (WS).
+- 391 testes verdes (incluindo 13 de aceitação do cron) + `ruff check` limpo.
+
+**Fase 6 — Gateway local + retomada (PRD §11)** (movida para 0.2.0a1)
+
 ### [0.1.0] — v1 inicial
 
 - `formiga research`: pesquisa profunda controlada pelo programa com
@@ -77,5 +102,6 @@ e este projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 - Failover opt-in (circuit breaker), orçamentos de busca/páginas/chamadas.
 - Testes offline com adaptadores falsos.
 
+[0.3.0a1]: https://github.com/.../commits/0.3.0a1
 [0.2.0a1]: https://github.com/.../commits/0.2.0a1
 [0.1.0]: https://github.com/.../commits/0.1.0

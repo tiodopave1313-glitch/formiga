@@ -167,6 +167,33 @@ Verificar:
 - [ ] `--print` e `--local` rodam **sem** precisar do gateway.
 - [ ] Nenhuma credencial aparece em logs ou sessões.
 
+# 8. Tarefas agendadas (cron)
+
+O cron agenda tarefas do agente, executadas pelo gateway em sessões isoladas.
+
+```bash
+# 1. Adicione um job
+formiga cron add "diga olá do cron" --schedule "every 1m"
+
+# 2. Liste
+formiga cron list
+
+# 3. Execute agora (in-process, offline)
+formiga cron run <id>
+
+# 4. Desabilite/remova
+formiga cron disable <id>
+formiga cron rm <id>
+```
+
+Verificar:
+
+- [ ] `formiga cron add` cria o job e mostra o próximo `next_run`.
+- [ ] `formiga cron list` exibe todos os jobs com status.
+- [ ] `formiga cron run <id>` executa o job in-process (sem gateway).
+- [ ] `formiga cron disable|enable|rm <id>` altera o estado do job.
+- [ ] `jobs.json` persiste em `~/.formiga/`.
+
 ## Aceite (marcar ao terminar)
 
 - [ ] `formiga agent --print` responde com o modelo real (NIM ou local).
@@ -177,6 +204,7 @@ Verificar:
 - [ ] `NO_COLOR=1` sem sequências ANSI; 80×24 respeitado.
 - [ ] `Ctrl+C`/`Esc` cooperativo; estado final correto.
 - [ ] Gateway: `start`/`status`/`stop` funcionam; reanexo mostra resposta.
+- [ ] Cron: `add`/`list`/`run`/`disable`/`rm` funcionam; `jobs.json` persiste.
 - [ ] `--print` e `--local` rodam sem gateway.
 - [ ] Nenhuma credencial em `messages.json`, `events.jsonl`, `transcript.md`
       nem stdout.
