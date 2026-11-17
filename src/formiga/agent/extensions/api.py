@@ -12,6 +12,7 @@ class ExtensionAPI(Protocol):
 
     config: object
     session: object
+    ui: object
 
     def register_tool(
         self,

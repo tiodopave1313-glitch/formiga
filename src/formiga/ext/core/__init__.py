@@ -11,7 +11,7 @@ from formiga.ext.core.shell import BashTool
 
 def setup(pi: ExtensionAPI) -> None:
     """Registra ferramentas core no registry usando a API pública de extensão."""
-    workdir = Path(getattr(pi.config, "agent_workdir", "."))
+    workdir = Path(getattr(pi.runtime_config, "agent_workdir", "."))
     for tool in (
         LsTool(workdir),
         ReadTool(workdir),

@@ -77,7 +77,10 @@ _AGENT_KEYS = {
     "tool_result_chars": "agent_tool_result_chars",
     "workdir": "agent_workdir",
 }
-_EXTENSIONS_KEYS = {"enabled": "extensions_enabled"}
+_EXTENSIONS_KEYS = {
+    "enabled": "extensions_enabled",
+    "trusted_projects": "extensions_trusted_projects",
+}
 _SECTIONS = {
     "llm": _LLM_KEYS,
     "search": _SEARCH_KEYS,
@@ -104,6 +107,7 @@ _INT_FIELDS = {
 _BOOL_FIELDS = {"llm_thinking"}
 _NULLABLE_STR_FIELDS = {"fallback_backend"}
 _DEFAULT_NAME = "formiga.toml"
+_GLOBAL_PATH = Path("~/.formiga/config.toml")
 _XDG_PATH = Path("~/.config/formiga/config.toml")
 
 
@@ -141,6 +145,7 @@ def load_config_values(path: Path) -> dict[str, object]:
         raise ConfigError(f"TOML inválido em {path}: {exc}") from exc
 
     values: dict[str, object] = {}
+    extension_settings: dict[str, dict[str, object]] = {}
     for section, mapping in _SECTIONS.items():
         block = data.get(section)
         if block is None:
@@ -153,9 +158,19 @@ def load_config_values(path: Path) -> dict[str, object]:
                 raise ConfigError(f"Chave desconhecida [{section}].{key} em {path}.")
             _check_type(name, value, path)
             values[name] = value
-    unknown = set(data) - set(_SECTIONS)
+    ext_sections = data.get("ext", {})
+    if ext_sections is not None:
+        if not isinstance(ext_sections, dict):
+            raise ConfigError(f"Seção [ext] inválida em {path}.")
+        for ext_name, settings in ext_sections.items():
+            if not isinstance(settings, dict):
+                raise ConfigError(f"Seção [ext.{ext_name}] inválida em {path}.")
+            extension_settings[ext_name] = dict(settings)
+    unknown = set(data) - set(_SECTIONS) - {"ext"}
     if unknown:
         raise ConfigError(f"Seções desconhecidas em {path}: {sorted(unknown)}.")
+    if extension_settings:
+        values["extension_settings"] = extension_settings
     if "openai_api_key" in values and os.name == "posix":
         _check_api_key_permissions(path)
     return values
@@ -172,7 +187,7 @@ def load_file_values(
 
 
 def _check_type(name: str, value: object, path: Path) -> None:
-    if name == "extensions_enabled":
+    if name in {"extensions_enabled", "extensions_trusted_projects"}:
         ok = isinstance(value, list) and all(isinstance(item, str) for item in value)
     elif name in _FLOAT_FIELDS:
         ok = isinstance(value, (int, float)) and not isinstance(value, bool)

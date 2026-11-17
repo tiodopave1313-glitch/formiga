@@ -160,6 +160,8 @@ class Config:
     agent_tool_result_chars: int = 4000
     agent_workdir: str = "."
     extensions_enabled: tuple[str, ...] = DEFAULT_ENABLED_EXTENSIONS
+    extensions_trusted_projects: tuple[str, ...] = ()
+    extension_settings: dict[str, dict[str, object]] = field(default_factory=dict)
 
     @classmethod
     def from_sources(
