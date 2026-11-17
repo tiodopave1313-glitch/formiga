@@ -31,10 +31,15 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Callable
+from pathlib import Path
 from time import monotonic
 
 from formiga.agent.chat import AgentCancelled, ChatResponse
-from formiga.agent.extensions.budget import ContextBudget, evict_pairs
+from formiga.agent.extensions.budget import (
+    ContextBudget,
+    evict_pairs,
+    reinject_anchor,
+)
 from formiga.agent.extensions.registry import ExtensionRegistry
 from formiga.agent.guardrails import (
     AgentBudget,
@@ -108,6 +113,9 @@ class AgentLoop:
         # Seções contribuídas por extensões via before_agent_start.
         self.secoes_extensao: dict[str, str] = {}
 
+        # Contador acumulado de mensagens descartadas por eviction (seção 9.1).
+        self.evicted: int = 0
+
         # system prompt montado a partir dos specs do registry — nenhuma
         # ferramenta concreta é citada pelo núcleo.
         self.messages: list[dict] = [
@@ -135,6 +143,50 @@ class AgentLoop:
     @property
     def cancelled(self) -> bool:
         return self._cancel.is_set()
+
+    def reset_session(self, base_dir: Path) -> Session:
+        """Inicia uma nova sessão em disco (comando `/new`).
+
+        Cria um diretório de sessão novo (a anterior permanece no disco),
+        reseta mensagens (só o system prompt), orçamentos, anti-loop,
+        contador de eviction e turno do registry. Devolve a nova `Session`
+        para o caller persistir a referência se quiser.
+        """
+        self.session = Session(base_dir)
+        self.budget = AgentBudget(
+            max_turns=int(getattr(self.config, "agent_max_turns", 24)),
+            max_llm_calls=int(
+                getattr(self.config, "agent_max_llm_calls", 120)
+            ),
+            timeout_seconds=float(
+                getattr(self.config, "agent_timeout_seconds", 1800)
+            ),
+        )
+        self.tool_budgets = ToolBudgets(
+            limits={
+                name: registration.budget_per_message
+                for name, registration in self.registry.registrations.items()
+                if registration.budget_per_message is not None
+            }
+        )
+        self.anti_loop = AntiLoop()
+        self.evicted = 0
+        self.registry.current_turn = 0
+        self._pending_len = None
+        self._agent_section = False
+        self.secoes_extensao = {}
+        self.messages = [
+            {
+                "role": "system",
+                "content": build_system_prompt(
+                    self.registry, secoes_extensao=self.secoes_extensao
+                ),
+            }
+        ]
+        self.session.save_messages(self.messages)
+        self.session.append_transcript("\n## Nova sessão\n")
+        self._emit("budget", self._budget_snapshot())
+        return self.session
 
     def _on_delta(self, piece: str) -> None:
         """Callback de streaming: emite evento e sinaliza cancelamento."""
@@ -189,11 +241,16 @@ class AgentLoop:
         self.on_event(event, data)
 
     def _budget_snapshot(self) -> dict:
+        context_tokens = self.context_budget.custo(self.messages)
         return {
             "turns": self.budget.turns_used,
             "max_turns": self.budget.max_turns,
             "llm_calls": self.budget.llm_calls_used,
             "max_llm_calls": self.budget.max_llm_calls,
+            "context_tokens": context_tokens,
+            "max_context_tokens": self.context_budget.max_context_tokens,
+            "ext": len(self.registry.registrations),
+            "evicted": self.evicted,
         }
 
     # ------------------------------------------------------------------ #
@@ -255,8 +312,22 @@ class AgentLoop:
             # padrão se ainda exceder a janela útil (seção 9.1).
             self.messages = self.registry.chain("context", list(self.messages))
             if not self.context_budget.coube(self.messages):
+                antes = len(self.messages)
                 self.messages = evict_pairs(
                     self.messages, self.context_budget.max_context_tokens
+                )
+                self.evicted += antes - len(self.messages)
+
+            # Âncora de objetivo: se o hook `context` (ou a eviction) removeu a
+            # última mensagem do usuário, re-inseri-la após a system para que o
+            # modelo nunca perca o objetivo original da sessão (seção 9.1).
+            self.messages, reinjetou = reinject_anchor(
+                self.messages, question
+            )
+            if reinjetou:
+                self.session.append_event(
+                    "budget",
+                    {"ancora_re_injetada": True, "turns": self.budget.turns_used},
                 )
 
             # chama o modelo com histórico + schemas das ferramentas

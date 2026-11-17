@@ -184,3 +184,29 @@ def custo_mensagens(mensagens: list[dict]) -> int:
                 tc.get("function", {}).get("arguments", "") or ""
             )
     return total
+
+
+def reinject_anchor(
+    messages: list[dict], anchor_content: str
+) -> tuple[list[dict], bool]:
+    """Re-injeta a última mensagem do usuário (âncora de objetivo).
+
+    O hook `context` pode ter descartado a pergunta do usuário corrente ao
+    windowar o histórico. A seção 9.1 do PRD exige que a âncora seja
+    preservada: se ela não estiver mais presente, re-inseri-la após a system
+    (índice 0) para que o modelo nunca perca o objetivo original.
+
+    Devolve `(nova_lista, re_injetou)` — `re_injetou` indica se houve
+    modificação, útil para o loop contar no evento `budget`.
+    """
+    if not messages:
+        return list(messages), False
+
+    ja_tem_usuario = any(m.get("role") == "user" for m in messages)
+    if ja_tem_usuario:
+        return list(messages), False
+
+    trabalho = [{"role": "system", "content": messages[0].get("content", "")}]
+    trabalho.append({"role": "user", "content": anchor_content})
+    trabalho.extend(messages[1:])
+    return trabalho, True

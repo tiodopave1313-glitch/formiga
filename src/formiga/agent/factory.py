@@ -11,6 +11,7 @@ importada daqui.
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 
 from formiga.agent.chat import build_chat_client
 from formiga.agent.extensions.budget import check_schema_budget, schema_tokens
@@ -102,10 +103,48 @@ def build_agent(
         "ext", _listar_extensoes, extension="builtin", source="builtin"
     )
 
-    return AgentLoop(
+    loop = AgentLoop(
         chat_client,
         registry,
         session,
         config,
         on_event=on_event,
     )
+
+    # Comandos de orçamento e sessão, disponíveis em qualquer sessão.
+    def _orcamento(_argumentos: str = "") -> str:
+        b = loop._budget_snapshot()
+        linhas = [
+            "Orçamento da sessão:",
+            f"  turnos {b['turns']}/{b['max_turns']}",
+            f"  chamadas llm {b['llm_calls']}/{b['max_llm_calls']}",
+            f"  contexto {b['context_tokens']}/{b['max_context_tokens']} tokens",
+            f"  ferramentas ativas {b['ext']}",
+            f"  descartados por eviction {b['evicted']}",
+        ]
+        if loop.tool_budgets.limits:
+            linhas.append("  consumo por ferramenta:")
+            for nome in sorted(loop.tool_budgets.limits):
+                usado = loop.tool_budgets.used.get(nome, 0)
+                limite = loop.tool_budgets.limits[nome]
+                linhas.append(f"    {nome}: {usado}/{limite} por mensagem")
+        return "\n".join(linhas)
+
+    def _nova_sessao(argumentos: str = "") -> str:
+        confirmado = argumentos.strip().lower() in {"sim", "confirmar", "yes"}
+        if not confirmado:
+            return (
+                "Nova sessão não confirmada. Use /new sim para criar uma "
+                "nova sessão (a anterior permanece em disco)."
+            )
+        loop.reset_session(Path(session.base_dir))
+        return "Nova sessão iniciada."
+
+    registry.register_command(
+        "budget", _orcamento, extension="builtin", source="builtin"
+    )
+    registry.register_command(
+        "new", _nova_sessao, extension="builtin", source="builtin"
+    )
+
+    return loop
