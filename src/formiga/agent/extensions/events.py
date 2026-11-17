@@ -13,5 +13,8 @@ OBSERVATION_EVENTS = frozenset(
         "budget",
         "interrupted",
         "extension_loaded",
+        # Fase 7 (cron): disparo e conclusão de um job agendado.
+        "job_start",
+        "job_end",
     }
 )

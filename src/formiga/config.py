@@ -62,6 +62,10 @@ DEFAULT_TOOL_SCHEMA_TOKENS = 1600
 # Perfil de modelo (seção 9.6 do PRD v2).
 ENV_PROFILE_MODEL_HINT = "FORMIGA_PROFILE_MODEL_HINT"
 
+# Tarefas agendadas (cron, Fase 7).
+ENV_CRON_CATCHUP = "FORMIGA_CRON_CATCHUP"
+ENV_CRON_TZ = "FORMIGA_CRON_TZ"
+
 ENV_OPENAI_URL = "FORMIGA_OPENAI_URL"
 ENV_OPENAI_API_KEY_ENV = "FORMIGA_OPENAI_API_KEY_ENV"
 ENV_FALLBACK_BACKEND = "FORMIGA_FALLBACK_BACKEND"
@@ -181,6 +185,10 @@ class Config:
     profiles: dict[str, dict[str, object]] = field(default_factory=dict)
     active_profile: str | None = None
 
+    # Tarefas agendadas (cron, Fase 7).
+    cron_catchup: str = "skip"  # "skip" (default) ou "once"
+    cron_tz: str | None = None  # fuso dos schedules; None = sistema
+
     @classmethod
     def from_sources(
         cls,
@@ -278,6 +286,14 @@ class Config:
                 ) from exc
         if (v := _env(env, ENV_PROFILE_MODEL_HINT)) is not None:
             config = replace(config, profile_model_hint=v)
+        if (v := _env(env, ENV_CRON_CATCHUP)) is not None:
+            if v not in {"skip", "once"}:
+                raise ConfigError(
+                    f"{ENV_CRON_CATCHUP} deve ser 'skip' ou 'once' (recebido: {v!r})."
+                )
+            config = replace(config, cron_catchup=v)
+        if (v := _env(env, ENV_CRON_TZ)) is not None:
+            config = replace(config, cron_tz=v)
         config.validate()
         return config
 
@@ -343,6 +359,8 @@ class Config:
             "max_context_tokens",
             "tool_schema_tokens",
             "profile_model_hint",
+            "cron_catchup",
+            "cron_tz",
         ):
             value = getattr(args, key, None)
             if value is not None and value != getattr(self, key):
@@ -396,6 +414,10 @@ class Config:
         if not 0 <= self.llm_temperature <= 2:
             raise ConfigError(
                 f"llm_temperature deve estar em [0, 2] (recebido: {self.llm_temperature})."
+            )
+        if self.cron_catchup not in {"skip", "once"}:
+            raise ConfigError(
+                f"cron_catchup deve ser 'skip' ou 'once' (recebido: {self.cron_catchup!r})."
             )
         if self.reserved_llm_calls > self.max_llm_calls:
             raise ConfigError(
