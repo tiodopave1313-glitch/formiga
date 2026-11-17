@@ -17,3 +17,6 @@ sessoes/
 # Configuração local (pode conter chave de API com permissão 0600).
 formiga.toml
 .env
+
+# Extensões e config globais do usuário (~/.formiga/ e .formiga/ do projeto).
+.formiga/

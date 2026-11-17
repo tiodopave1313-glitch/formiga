@@ -152,7 +152,11 @@ def _toml_dump_value(value: object) -> str:
 
 
 def write_global_config(data: dict[str, object]) -> None:
-    """Escreve ~/.formiga/config.toml (cria o diretório quando necessário)."""
+    """Escreve ~/.formiga/config.toml (cria o diretório quando necessário).
+
+    Suporta sub-tabelas aninhadas (`[secao.chave]`) e arrays de tabelas
+    (`[[secao.chave]]`), que aparecem em config globais pré-existentes.
+    """
     path = global_config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     linhas: list[str] = []
@@ -161,7 +165,21 @@ def write_global_config(data: dict[str, object]) -> None:
             continue
         linhas.append(f"[{secao}]")
         for chave, valor in bloco.items():
-            linhas.append(f"{chave} = {_toml_dump_value(valor)}")
+            if isinstance(valor, dict):
+                linhas.append(f"[{secao}.{chave}]")
+                for subchave, subvalor in valor.items():
+                    linhas.append(f"{subchave} = {_toml_dump_value(subvalor)}")
+                linhas.append("")
+            elif isinstance(valor, list) and valor and all(
+                isinstance(i, dict) for i in valor
+            ):
+                for item in valor:
+                    linhas.append(f"[[{secao}.{chave}]]")
+                    for subchave, subvalor in item.items():
+                        linhas.append(f"{subchave} = {_toml_dump_value(subvalor)}")
+                    linhas.append("")
+            else:
+                linhas.append(f"{chave} = {_toml_dump_value(valor)}")
         linhas.append("")
     path.write_text("\n".join(linhas) + "\n", encoding="utf-8")
 
