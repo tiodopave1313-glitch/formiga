@@ -56,10 +56,10 @@ def select_profile(
 ) -> Profile | None:
     """Seleciona um perfil pelo nome do modelo ou `model_hint`.
 
-    Busca por substring (case-insensitive) do modelo nos nomes dos perfis.
-    Devolve None quando não há perfil aplicável.
+    Busca por substring (case-insensitive, ignorando separadores) do modelo
+    nos nomes dos perfis. Devolve None quando não há perfil aplicável.
     """
-    model_lower = model.lower()
+    model_norm = _norm(model)
     hint = (model_hint or "").lower()
 
     # Candidatos: perfis builtin + de usuário
@@ -68,16 +68,23 @@ def select_profile(
     if user_profiles:
         candidatos.update(user_profiles)
 
-    # 1. model_hint exato
-    if hint and hint in candidatos:
-        return candidatos[hint]
+    # 1. model_hint exato (normalizado)
+    if hint and _norm(hint) in {_norm(p.name) for p in candidatos.values()}:
+        for perfil in candidatos.values():
+            if _norm(perfil.name) == _norm(hint):
+                return perfil
 
-    # 2. substring do nome do modelo nos nomes de perfil
+    # 2. substring normalizada do nome do modelo nos nomes de perfil
     for perfil in candidatos.values():
-        if perfil.name.lower() in model_lower:
+        if _norm(perfil.name) in model_norm:
             return perfil
 
     return None
+
+
+def _norm(text: str) -> str:
+    """Normaliza para comparação: minúsculo, alfanumérico apenas."""
+    return "".join(c for c in text.lower() if c.isalnum())
 
 
 def apply_profile(config, profile: Profile) -> None:
