@@ -5,7 +5,7 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
-## [2.0.0] — 2026-11-17
+## [0.2.0a1] — 2026-11-17
 
 ### MVP do Formiga Agent (PRD v2, Fases 1–5)
 
@@ -46,7 +46,7 @@ e este projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
   `max_context_tokens`, `tool_schema_tokens`.
 - `docs/smoke_agent.md` 2.0: cenários do agente, extensão externa, perfis,
   TUI, smoke local Gemma 4 E4B (documentado) e NIM.
-- `pyproject.toml` → 2.0.0; `CHANGELOG.md`.
+- `pyproject.toml` → 0.2.0a1; `CHANGELOG.md`.
 - `formiga research` confirmado intacto (smoke real com NIM executado).
 
 ### [0.1.0] — v1 inicial
@@ -59,5 +59,5 @@ e este projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 - Failover opt-in (circuit breaker), orçamentos de busca/páginas/chamadas.
 - Testes offline com adaptadores falsos.
 
-[2.0.0]: https://github.com/.../commits/2.0.0
+[0.2.0a1]: https://github.com/.../commits/0.2.0a1
 [0.1.0]: https://github.com/.../commits/0.1.0
