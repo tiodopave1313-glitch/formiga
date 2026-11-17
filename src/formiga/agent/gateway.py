@@ -32,7 +32,7 @@ from pathlib import Path
 
 from formiga.agent.factory import build_agent
 from formiga.agent.session import Session
-from formiga.config import Config
+from formiga.config import Config, ConfigError
 from formiga.configfile import global_config_path
 
 # Diretório de configuração global (~/.formiga).
@@ -343,19 +343,28 @@ class Gateway:
 
         if action == "create":
             sid = msg.get("session") or self._new_session_id()
-            config = self._build_config(msg)
-            sess = GatewaySession(sid, config, self.cwd / "sessoes", self._make_on_event(sid))
-            self.sessions[sid] = sess
-            self.clients.setdefault(sid, set()).add(writer)
-            await self._send(
-                writer,
-                {
-                    "action": "attached",
-                    "session": sid,
-                    "snapshot": self._snapshot(sid),
-                },
-            )
-            self._reset_idle()
+            try:
+                config = self._build_config(msg)
+                sess = GatewaySession(sid, config, self.cwd / "sessoes", self._make_on_event(sid))
+                self.sessions[sid] = sess
+                self.clients.setdefault(sid, set()).add(writer)
+                await self._send(
+                    writer,
+                    {
+                        "action": "attached",
+                        "session": sid,
+                        "snapshot": self._snapshot(sid),
+                    },
+                )
+                self._reset_idle()
+            except (ConfigError, ValueError, OSError) as exc:
+                await self._send(
+                    writer,
+                    {
+                        "action": "error",
+                        "message": f"falha ao criar sessão: {exc}",
+                    },
+                )
             return
 
         if action == "attach":
@@ -412,6 +421,33 @@ class Gateway:
 
         if action == "ping":
             await self._send(writer, {"action": "pong"})
+            return
+
+        if action == "command":
+            sid = session_id
+            if sid not in self.sessions:
+                await self._send(
+                    writer,
+                    {"action": "error", "message": "sessão não encontrada"},
+                )
+                return
+            nome = msg.get("nome", "")
+            argumentos = msg.get("argumentos", "")
+            try:
+                resultado = self.sessions[sid].loop.registry.dispatch_command(
+                    nome, argumentos
+                )
+            except KeyError:
+                resultado = f"Comando desconhecido: /{nome}"
+            await self._send(
+                writer,
+                {
+                    "action": "command_result",
+                    "session": sid,
+                    "comando": nome,
+                    "resultado": resultado,
+                },
+            )
             return
 
     # -- execução da sessão ------------------------------------------- #
@@ -484,17 +520,38 @@ class Gateway:
     def _build_config(self, msg: dict) -> Config:
         """Constrói um Config a partir dos campos de `create`.
 
-        Campos de backend/modelo (llm_backend, model, urls) vêm do
-        ambiente/arquivo via `Config()` — não são campos diretos do dataclass.
-        Aqui só aplicamos overrides de agente que são campos diretos.
+        Campos de backend/modelo (llm_backend, model, urls, thinking, etc.)
+        são campos diretos do dataclass Config e são aplicados aqui.
         """
         kwargs: dict[str, object] = {"agent_workdir": str(self.cwd)}
-        if msg.get("max_turns") is not None:
-            kwargs["agent_max_turns"] = int(msg["max_turns"])
-        if msg.get("max_llm_calls") is not None:
-            kwargs["agent_max_llm_calls"] = int(msg["max_llm_calls"])
-        if msg.get("timeout_seconds") is not None:
-            kwargs["agent_timeout_seconds"] = float(msg["timeout_seconds"])
+        # Orçamento de agente (campos diretos do dataclass).
+        for chave in (
+            "agent_max_turns",
+            "agent_max_llm_calls",
+            "agent_timeout_seconds",
+            "max_context_tokens",
+            "tool_schema_tokens",
+        ):
+            if msg.get(chave) is not None:
+                kwargs[chave] = msg[chave]
+        # Backend / modelo / rede (campos diretos do dataclass).
+        for chave in (
+            "model",
+            "ollama_url",
+            "searxng_url",
+            "llm_backend",
+            "openai_url",
+            "openai_api_key_env",
+            "llm_thinking",
+            "llamacpp_thinking",
+            "fallback_backend",
+            "fallback_after_failures",
+            "llm_max_retries",
+            "llm_temperature",
+        ):
+            if msg.get(chave) is not None:
+                kwargs[chave] = msg[chave]
+        # Perfil e extensões.
         if msg.get("profile"):
             kwargs["active_profile"] = msg["profile"]
         if msg.get("extensions") is not None:
