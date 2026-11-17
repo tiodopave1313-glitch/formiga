@@ -111,6 +111,53 @@ _GLOBAL_PATH = Path("~/.formiga/config.toml")
 _XDG_PATH = Path("~/.config/formiga/config.toml")
 
 
+def global_config_path() -> Path:
+    """Caminho do arquivo de configuração global (~/.formiga/config.toml)."""
+    return _GLOBAL_PATH.expanduser()
+
+
+def read_global_config() -> dict[str, object]:
+    """Lê ~/.formiga/config.toml; devolve `{}` quando não existe."""
+    path = global_config_path()
+    if not path.is_file():
+        return {}
+    try:
+        with path.open("rb") as fh:
+            return tomllib.load(fh)
+    except tomllib.TOMLDecodeError as exc:
+        raise ConfigError(f"TOML inválido em {path}: {exc}") from exc
+
+
+def _toml_dump_value(value: object) -> str:
+    """Serializa um valor TOML simples (str, int, float, bool, lista de str)."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        return repr(value)
+    if isinstance(value, str):
+        return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    if isinstance(value, list):
+        return "[" + ", ".join(_toml_dump_value(item) for item in value) + "]"
+    raise ValueError(f"valor não serializável para TOML: {value!r}")
+
+
+def write_global_config(data: dict[str, object]) -> None:
+    """Escreve ~/.formiga/config.toml (cria o diretório quando necessário)."""
+    path = global_config_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    linhas: list[str] = []
+    for secao, bloco in data.items():
+        if not isinstance(bloco, dict):
+            continue
+        linhas.append(f"[{secao}]")
+        for chave, valor in bloco.items():
+            linhas.append(f"{chave} = {_toml_dump_value(valor)}")
+        linhas.append("")
+    path.write_text("\n".join(linhas) + "\n", encoding="utf-8")
+
+
 def find_config_file(
     explicit: str | None = None, env: dict[str, str] | None = None
 ) -> Path | None:

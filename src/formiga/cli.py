@@ -10,7 +10,12 @@ from formiga import __version__
 from formiga.agent.factory import build_agent
 from formiga.agent.session import Session
 from formiga.config import Config, ConfigError
-from formiga.configfile import load_file_values
+from formiga.configfile import (
+    global_config_path,
+    load_file_values,
+    read_global_config,
+    write_global_config,
+)
 from formiga.envfile import load_env_file
 from formiga.llm import LLMError
 from formiga.orchestrator import run_research
@@ -188,6 +193,16 @@ def build_parser() -> argparse.ArgumentParser:
     agent.add_argument("--verbose", action="store_true", help="Eventos operacionais adicionais.")
 
     sub.add_parser("version", help="Mostra a versão.")
+
+    trust = sub.add_parser(
+        "trust", help="Adiciona um projeto à allowlist global de extensões (.formiga/extensions)."
+    )
+    trust.add_argument("caminho", help="Caminho do diretório do projeto.")
+
+    untrust = sub.add_parser(
+        "untrust", help="Remove um projeto da allowlist global de extensões."
+    )
+    untrust.add_argument("caminho", help="Caminho do diretório do projeto.")
     return parser
 
 
@@ -203,6 +218,48 @@ def _load_config(args) -> Config:
     return config
 
 
+def _toggle_trust(caminho: str, *, add: bool) -> int:
+    """Adiciona ou remove um projeto da allowlist global de extensões.
+
+    Escreve/atualiza [extensions].trusted_projects em
+    ~/.formiga/config.toml, usado por discover_extensions para decidir se
+    .formiga/extensions/<projeto> carrega.
+    """
+    target = Path(caminho).expanduser().resolve()
+    texto = str(target)
+    data = read_global_config()
+    extensions = data.get("extensions")
+    if not isinstance(extensions, dict):
+        extensions = {}
+        data["extensions"] = extensions
+    trusted = list(extensions.get("trusted_projects") or [])
+
+    if add:
+        if texto in trusted:
+            print(f"já confiado: {target}")
+            return EXIT_OK
+        trusted.append(texto)
+        verbo = "Adicionado"
+    else:
+        antes = len(trusted)
+        trusted = [item for item in trusted if item != texto]
+        if len(trusted) == antes:
+            print(f"não estava confiado: {target}")
+            return EXIT_OK
+        verbo = "Removido"
+
+    extensions["trusted_projects"] = trusted
+    try:
+        write_global_config(data)
+    except (OSError, ValueError) as exc:
+        print(
+            f"Erro ao gravar {global_config_path()}: {exc}", file=sys.stderr
+        )
+        return EXIT_OPERATIONAL_FAILURE
+    print(f"{verbo} à confiança de extensões: {target}")
+    return EXIT_OK
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -210,6 +267,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "version":
         print(f"formiga {__version__}")
         return EXIT_OK
+
+    if args.command == "trust":
+        return _toggle_trust(args.caminho, add=True)
+    if args.command == "untrust":
+        return _toggle_trust(args.caminho, add=False)
 
     if args.command == "research":
         if not args.question.strip():
