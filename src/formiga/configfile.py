@@ -76,6 +76,8 @@ _AGENT_KEYS = {
     "max_web_fetches": "agent_max_web_fetches",
     "tool_result_chars": "agent_tool_result_chars",
     "workdir": "agent_workdir",
+    "max_context_tokens": "max_context_tokens",
+    "tool_schema_tokens": "tool_schema_tokens",
 }
 _EXTENSIONS_KEYS = {
     "enabled": "extensions_enabled",
@@ -103,6 +105,8 @@ _INT_FIELDS = {
     "agent_max_web_searches",
     "agent_max_web_fetches",
     "agent_tool_result_chars",
+    "max_context_tokens",
+    "tool_schema_tokens",
 }
 _BOOL_FIELDS = {"llm_thinking"}
 _NULLABLE_STR_FIELDS = {"fallback_backend"}

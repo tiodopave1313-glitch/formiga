@@ -13,6 +13,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from formiga.agent.chat import build_chat_client
+from formiga.agent.extensions.budget import check_schema_budget, schema_tokens
 from formiga.agent.extensions.discovery import discover_extensions
 from formiga.agent.extensions.registry import ExtensionRegistry
 from formiga.agent.loop import AgentLoop
@@ -32,6 +33,19 @@ def build_agent(
     # Descoberta determinística (builtin → pip → global → projeto). Na Fase 1
     # somente builtin está ativa; pip/global/projeto entram na Fase 2.
     discover_extensions(config, session, registry)
+
+    # Orçamento de schemas: exceder falha rápido no startup citando a
+    # extensão responsável (seção 9.7 do PRD). Nunca "estoura e segue".
+    total_schema_tokens = sum(
+        schema_tokens(reg.tool.schema())
+        for reg in registry.registrations.values()
+        if not reg.lazy
+    )
+    check_schema_budget(
+        total_schema_tokens,
+        config.tool_schema_tokens,
+        offender=None,
+    )
 
     # Comandos builtin /tools e /ext, disponíveis em qualquer sessão.
     def _listar_tools(argumentos: str = "") -> str:

@@ -53,6 +53,12 @@ ENV_AGENT_WORKDIR = "FORMIGA_AGENT_WORKDIR"
 ENV_EXTENSIONS_ENABLED = "FORMIGA_EXTENSIONS_ENABLED"
 DEFAULT_ENABLED_EXTENSIONS = ("core", "web", "deepsearch")
 
+# Janela de contexto e orçamento de schemas (seção 9 do PRD v2).
+ENV_AGENT_MAX_CONTEXT_TOKENS = "FORMIGA_AGENT_MAX_CONTEXT_TOKENS"
+ENV_AGENT_TOOL_SCHEMA_TOKENS = "FORMIGA_AGENT_TOOL_SCHEMA_TOKENS"
+DEFAULT_MAX_CONTEXT_TOKENS = 32768
+DEFAULT_TOOL_SCHEMA_TOKENS = 1600
+
 ENV_OPENAI_URL = "FORMIGA_OPENAI_URL"
 ENV_OPENAI_API_KEY_ENV = "FORMIGA_OPENAI_API_KEY_ENV"
 ENV_FALLBACK_BACKEND = "FORMIGA_FALLBACK_BACKEND"
@@ -163,6 +169,10 @@ class Config:
     extensions_trusted_projects: tuple[str, ...] = ()
     extension_settings: dict[str, dict[str, object]] = field(default_factory=dict)
 
+    # Janela de contexto e orçamento de schemas (seção 9 do PRD v2).
+    max_context_tokens: int = DEFAULT_MAX_CONTEXT_TOKENS
+    tool_schema_tokens: int = DEFAULT_TOOL_SCHEMA_TOKENS
+
     @classmethod
     def from_sources(
         cls,
@@ -242,6 +252,22 @@ class Config:
                 config,
                 extensions_enabled=tuple(name.strip() for name in v.split(",") if name.strip()),
             )
+        if (v := _env(env, ENV_AGENT_MAX_CONTEXT_TOKENS)) is not None:
+            try:
+                config = replace(config, max_context_tokens=int(v))
+            except ValueError as exc:
+                raise ConfigError(
+                    "FORMIGA_AGENT_MAX_CONTEXT_TOKENS não é um inteiro: "
+                    f"{v!r}."
+                ) from exc
+        if (v := _env(env, ENV_AGENT_TOOL_SCHEMA_TOKENS)) is not None:
+            try:
+                config = replace(config, tool_schema_tokens=int(v))
+            except ValueError as exc:
+                raise ConfigError(
+                    "FORMIGA_AGENT_TOOL_SCHEMA_TOKENS não é um inteiro: "
+                    f"{v!r}."
+                ) from exc
         config.validate()
         return config
 
@@ -304,6 +330,8 @@ class Config:
             "agent_tool_result_chars",
             "agent_workdir",
             "extensions_enabled",
+            "max_context_tokens",
+            "tool_schema_tokens",
         ):
             value = getattr(args, key, None)
             if value is not None and value != getattr(self, key):
@@ -336,6 +364,8 @@ class Config:
             ("agent_max_web_searches", self.agent_max_web_searches),
             ("agent_max_web_fetches", self.agent_max_web_fetches),
             ("agent_tool_result_chars", self.agent_tool_result_chars),
+            ("max_context_tokens", self.max_context_tokens),
+            ("tool_schema_tokens", self.tool_schema_tokens),
         )
         for name, value in int_fields:
             _positive_int(name, value)
