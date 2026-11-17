@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from formiga.agent.chat import ChatResponse, ToolCall
+from formiga.agent.extensions.registry import ExtensionRegistry
 from formiga.config import Config
 from formiga.fetch import FetchedPage, FetchError
 from formiga.models import ResearchContract, ResearchState, Source
@@ -164,3 +165,42 @@ class FakeFetcher:
         if url in self.fail_urls or url not in self.pages:
             raise FetchError(url, "conexão recusada (simulada)")
         return FetchedPage(requested_url=url, final_url=url, content=self.pages[url])
+
+
+# --------------------------------------------------------------------------
+# Helper: constrói um registry a partir de ferramentas instanciadas.
+#
+# Os testes do agente (v1) constroem `AgentLoop(chat, [tools], session, cfg)`.
+# Na Fase 1 do v2 o loop requer um `ExtensionRegistry`, então este helper
+# registra cada tool lendo seu orçamento declarado (`budget_per_message` ou
+# `budget_config_attr` lido do `config`) e o cap default do agente.
+
+
+def registry_of(
+    *tools,
+    config: Config | None = None,
+    default_cap_chars: int = 4000,
+) -> ExtensionRegistry:
+    """Registra ferramentas em um `ExtensionRegistry` e o retorna.
+
+    `config` é usado para resolver `budget_config_attr` quando a tool não
+    declara `budget_per_message` diretamente, e para sobrescrever o valor
+    capturado no `budget_per_message` da tool quando `budget_config_attr`
+    estiver presente (o orçamento efetivo é lido do config no registro).
+    """
+    registry = ExtensionRegistry()
+    for tool in tools:
+        budget = getattr(tool, "budget_per_message", None)
+        config_attr = getattr(tool, "budget_config_attr", None)
+        if config is not None and config_attr:
+            budget = int(getattr(config, config_attr))
+        cap_chars = getattr(tool, "cap_chars", None)
+        prompt_hint = getattr(tool, "prompt_hint", None)
+        registry.register_tool(
+            tool,
+            budget_per_message=budget,
+            cap_chars=cap_chars,
+            prompt_hint=prompt_hint,
+        )
+    return registry
+

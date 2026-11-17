@@ -21,7 +21,7 @@ from formiga.agent.tools.files import LsTool
 from formiga.config import Config
 from formiga.llm import LLMError
 from formiga.openai import OpenAIClient
-from tests.fakes_agent import FakeChatClient, tool_call
+from tests.fakes_agent import FakeChatClient, registry_of, tool_call
 from tests.test_agent_stream import sse_body
 
 
@@ -79,7 +79,12 @@ def test_loop_envia_tool_calls_no_formato_openai(tmp_path):
         )
 
     session = Session(tmp_path / "sessoes")
-    loop = AgentLoop(_client(handler), [LsTool(tmp_path)], session, Config())
+    loop = AgentLoop(
+        _client(handler),
+        registry_of(LsTool(tmp_path), config=Config()),
+        session,
+        Config(),
+    )
     resposta = loop.run("liste os arquivos")
     assert resposta == "listei."
     assert len(requests) == 2
@@ -139,7 +144,12 @@ def test_servidor_estrito_rejeita_formato_invalido(tmp_path):
         )
 
     session = Session(tmp_path / "sessoes")
-    loop = AgentLoop(_client(handler), [LsTool(tmp_path)], session, Config())
+    loop = AgentLoop(
+        _client(handler),
+        registry_of(LsTool(tmp_path), config=Config()),
+        session,
+        Config(),
+    )
     resposta = loop.run("liste")
     assert resposta == "servidor estrito aceitou."
 
@@ -159,7 +169,12 @@ def test_rollback_do_turno_apos_falha_de_llm(tmp_path):
             raise LLMError("HTTP 400 do endpoint remoto: invalid request")
 
     session = Session(tmp_path / "sessoes")
-    loop = AgentLoop(FalhaNaSegunda(), [LsTool(tmp_path)], session, Config())
+    loop = AgentLoop(
+        FalhaNaSegunda(),
+        registry_of(LsTool(tmp_path), config=Config()),
+        session,
+        Config(),
+    )
     with pytest.raises(LLMError):
         loop.run("liste os arquivos")
 
@@ -175,7 +190,12 @@ def test_rollback_do_turno_apos_falha_de_llm(tmp_path):
 
     # próximo run recomeça do estado limpo e conclui
     chat2 = FakeChatClient([ChatResponse(content="funcionou agora.")])
-    loop2 = AgentLoop(chat2, [LsTool(tmp_path)], session, Config())
+    loop2 = AgentLoop(
+        chat2,
+        registry_of(LsTool(tmp_path), config=Config()),
+        session,
+        Config(),
+    )
     loop2.messages = loop.messages  # mesmo histórico (já revertido)
     resposta = loop2.run("de novo")
     assert resposta == "funcionou agora."

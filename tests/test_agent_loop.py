@@ -10,7 +10,7 @@ from formiga.agent.session import Session
 from formiga.agent.tools.files import LsTool
 from formiga.agent.tools.shell import BashTool
 from formiga.config import Config
-from tests.fakes_agent import FakeChatClient, FakeOrchestrator, tool_call
+from tests.fakes_agent import FakeChatClient, FakeOrchestrator, registry_of, tool_call
 
 
 def _make_loop(tmp_path, responses, deep_search_fn=None, searcher=None, **overrides):
@@ -28,7 +28,7 @@ def _make_loop(tmp_path, responses, deep_search_fn=None, searcher=None, **overri
         tools.append(DeepSearchTool(cfg, tmp_path / "research", run_fn=deep_search_fn))
     chat = FakeChatClient(responses)
     session = Session(tmp_path / "sessoes")
-    return AgentLoop(chat, tools, session, cfg), chat
+    return AgentLoop(chat, registry_of(*tools, config=cfg), session, cfg), chat
 
 
 def test_turn_normal_executa_ferramenta_e_retorna_resposta(tmp_path):
@@ -129,7 +129,7 @@ def test_orcamento_deep_search_esgotado_retorna_erro(tmp_path):
     assert any(
         "budget_exhausted" in linha for linha in eventos.splitlines()
     ), f"Nenhum evento de orçamento esgotado em: {eventos}"
-    assert loop.tool_budgets.deep_searches_used == 2
+    assert loop.tool_budgets.used.get("deep_search", 0) == 2
 
 
 def test_orcamento_web_search_esgotado_retorna_erro(tmp_path):
@@ -166,7 +166,7 @@ def test_orcamento_web_search_esgotado_retorna_erro(tmp_path):
         "budget_exhausted" in linha for linha in eventos.splitlines()
     ), f"Nenhum evento de orçamento esgotado em: {eventos}"
     # E o orçamento foi consumido (2/2)
-    assert loop.tool_budgets.web_searches_used == 2
+    assert loop.tool_budgets.used.get("web_search", 0) == 2
 
 
 def test_orcamentos_reiniciados_por_mensagem(tmp_path):

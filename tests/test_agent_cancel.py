@@ -9,7 +9,7 @@ from formiga.agent.loop import AgentLoop
 from formiga.agent.session import Session
 from formiga.agent.tools.files import LsTool
 from formiga.config import Config
-from tests.fakes_agent import FakeChatClient, FakeOrchestrator, tool_call
+from tests.fakes_agent import FakeChatClient, FakeOrchestrator, registry_of, tool_call
 
 
 def _make_loop(tmp_path, responses, events, extra_tools=(), **overrides):
@@ -20,7 +20,8 @@ def _make_loop(tmp_path, responses, events, extra_tools=(), **overrides):
     chat = FakeChatClient(responses)
     session = Session(tmp_path / "sessoes")
     loop = AgentLoop(
-        chat, tools, session, cfg, on_event=lambda e, d: events.append((e, d))
+        chat, registry_of(*tools, config=cfg), session, cfg,
+        on_event=lambda e, d: events.append((e, d)),
     )
     return loop, chat
 
@@ -171,7 +172,7 @@ def test_deep_search_reexpoe_progresso(tmp_path):
         extra_tools=[deep],
     )
     loop.run("pesquise")
-    progressos = [d for t, d in events if t == "deep_search_progress"]
+    progressos = [d for t, d in events if t == "tool_progress"]
     assert progressos, "progresso do motor não foi reexposto"
     mensagens = [p["message"] for p in progressos]
     assert "planejado" in mensagens

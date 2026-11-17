@@ -11,14 +11,14 @@ from formiga.agent.tools.files import LsTool
 from formiga.cli import main
 from formiga.config import Config
 from formiga.llm import LLMError
-from tests.fakes_agent import FakeChatClient, tool_call
+from tests.fakes_agent import FakeChatClient, registry_of, tool_call
 
 
 def _make_loop(tmp_path, responses: list[ChatResponse]) -> tuple[AgentLoop, Session]:
     cfg = Config()
     session = Session(tmp_path / "sessoes")
     chat = FakeChatClient(responses)
-    loop = AgentLoop(chat, [LsTool(tmp_path)], session, cfg)
+    loop = AgentLoop(chat, registry_of(LsTool(tmp_path), config=cfg), session, cfg)
     return loop, session
 
 

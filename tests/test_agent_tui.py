@@ -15,13 +15,13 @@ from formiga.agent.tools.files import LsTool
 from formiga.agent.tui.app import AgentApp, ToolDetailsScreen
 from formiga.agent.tui.controller import AgentController
 from formiga.config import Config
-from tests.fakes_agent import FakeChatClient, tool_call
+from tests.fakes_agent import FakeChatClient, registry_of, tool_call
 
 
 def _app(tmp_path, chat, initial_question=None):
     cfg = Config()
     session = Session(tmp_path / "sessoes")
-    loop = AgentLoop(chat, [LsTool(tmp_path)], session, cfg)
+    loop = AgentLoop(chat, registry_of(LsTool(tmp_path), config=cfg), session, cfg)
     controller = AgentController(cfg, session, loop=loop)
     app = AgentApp(cfg, session, initial_question=initial_question, controller=controller)
     return app, controller

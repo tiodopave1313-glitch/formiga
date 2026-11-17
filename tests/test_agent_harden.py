@@ -22,6 +22,7 @@ from tests.fakes_agent import (
     FakeChatClient,
     FakeFetcher,
     FakeOrchestrator,
+    registry_of,
     tool_call,
 )
 from tests.test_agent_deepsearch import _config as deep_config
@@ -33,7 +34,7 @@ def _loop(tmp_path, responses, tools, **overrides):
         setattr(cfg, k, v)
     chat = FakeChatClient(responses)
     session = Session(tmp_path / "sessoes")
-    return AgentLoop(chat, tools, session, cfg), chat, session
+    return AgentLoop(chat, registry_of(*tools, config=cfg), session, cfg), chat, session
 
 
 def test_anti_loop_nudge_em_2_chamadas_iguais_via_loop(tmp_path):
@@ -96,13 +97,13 @@ def test_deep_search_relatorio_persistido_no_disco(tmp_path):
             ChatResponse(content="Respondi com base no relatório."),
         ]
     )
-    loop = AgentLoop(chat, tools, session, cfg)
+    loop = AgentLoop(chat, registry_of(*tools, config=cfg), session, cfg)
     resposta = loop.run("pesquise X")
     assert "Respondi" in resposta
     reports = list(session.research_dir.glob("*/report.md"))
     assert reports, "relatório do deep_search não ficou no disco"
     assert "Relatório simulado" in reports[0].read_text(encoding="utf-8")
-    assert loop.tool_budgets.deep_searches_used == 1
+    assert loop.tool_budgets.used.get("deep_search", 0) == 1
 
 
 from formiga.agent.tools.deepsearch import DeepSearchTool as DeepSearch  # noqa: E402
@@ -121,7 +122,7 @@ def test_tui_terminais_pequenos_nao_quebram(tmp_path):
         cfg = Config()
         session = Session(tmp_path / f"sessoes-{size[0]}")
         chat = FakeChatClient([ChatResponse(content="resposta em tela pequena.")])
-        loop = AgentLoop(chat, [ReadTool(tmp_path)], session, cfg)
+        loop = AgentLoop(chat, registry_of(ReadTool(tmp_path), config=cfg), session, cfg)
         controller = AgentController(cfg, session, loop=loop)
         app = AgentApp(cfg, session, controller=controller)
         async with app.run_test(size=size) as pilot:
@@ -155,7 +156,7 @@ def test_credenciais_nao_aparecem_em_artefatos(tmp_path):
         ]
     )
     session = Session(tmp_path / "sessoes")
-    loop = AgentLoop(chat, tools, session, cfg)
+    loop = AgentLoop(chat, registry_of(*tools, config=cfg), session, cfg)
     loop.run("liste")
 
     for arquivo in session.dir.iterdir():

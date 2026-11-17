@@ -21,6 +21,7 @@ from tests.fakes_agent import (
     FakeChatClient,
     FakeFetcher,
     FakeSearchProvider,
+    registry_of,
     tool_call,
 )
 
@@ -76,16 +77,21 @@ def test_smoke_tarefa_mista_sem_deep_search(tmp_path):
         ]
     )
     session = Session(tmp_path / "sessoes")
-    loop = AgentLoop(chat, _tools(tmp_path, cfg, searcher, fetcher), session, cfg)
+    loop = AgentLoop(
+        chat,
+        registry_of(*_tools(tmp_path, cfg, searcher, fetcher), config=cfg),
+        session,
+        cfg,
+    )
     resposta = loop.run("Tarefa mista: confira notas, rode um comando e pesquise o identificador.")
 
     assert "Resposta fundamentada" in resposta
     assert len(chat.calls) == 5
 
     # orçamentos: 1 web_search + 1 web_fetch; deep_search nunca acionado
-    assert loop.tool_budgets.web_searches_used == 1
-    assert loop.tool_budgets.web_fetches_used == 1
-    assert loop.tool_budgets.deep_searches_used == 0
+    assert loop.tool_budgets.used.get("web_search", 0) == 1
+    assert loop.tool_budgets.used.get("web_fetch", 0) == 1
+    assert loop.tool_budgets.used.get("deep_search", 0) == 0
 
     # sessão persistida: mensagens com a resposta final; eventos com as tools
     mensagens = json.loads(session.messages_path.read_text(encoding="utf-8"))
@@ -119,10 +125,15 @@ def test_smoke_orcamento_web_respeitado_na_tarefa_mista(tmp_path):
     session = Session(tmp_path / "sessoes")
     # orçamento padrão: max_web_searches=6 → configuramos 1
     cfg.agent_max_web_searches = 1
-    loop = AgentLoop(chat, _tools(tmp_path, cfg, searcher, fetcher), session, cfg)
+    loop = AgentLoop(
+        chat,
+        registry_of(*_tools(tmp_path, cfg, searcher, fetcher), config=cfg),
+        session,
+        cfg,
+    )
     resposta = loop.run("busque a e b")
     assert "Respondo com o que consegui" in resposta
-    assert loop.tool_budgets.web_searches_used == 1
+    assert loop.tool_budgets.used.get("web_search", 0) == 1
     # o 2º web_search não executou; o contexto orçamental foi ao modelo
     segunda = chat.calls[1][0]
     ultimas = [m["content"] for m in segunda if m["role"] == "tool"]

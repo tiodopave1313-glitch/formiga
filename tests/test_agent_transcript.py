@@ -18,7 +18,7 @@ from formiga.agent.tools.files import LsTool
 from formiga.agent.tools.shell import BashTool
 from formiga.config import Config
 from formiga.llm import LLMError
-from tests.fakes_agent import FakeChatClient, tool_call
+from tests.fakes_agent import FakeChatClient, registry_of, tool_call
 
 
 def _loop(tmp_path, chat, tools, **overrides):
@@ -26,7 +26,7 @@ def _loop(tmp_path, chat, tools, **overrides):
     for k, v in overrides.items():
         setattr(cfg, k, v)
     session = Session(tmp_path / "sessoes")
-    return AgentLoop(chat, tools, session, cfg), session
+    return AgentLoop(chat, registry_of(*tools, config=cfg), session, cfg), session
 
 
 def test_transcript_tarefa_completa(tmp_path):
