@@ -1,7 +1,11 @@
 """Cliente WebSocket do gateway (seção 11 do PRD v2 — Fase 6).
 
-`GatewayClient` conecta ao daemon local (pidfile `~/.formiga/gateway-<hash>.json`),
+`GatewayClient` conecta ao daemon local (pidfile `~/./formiga/gateway-<hash>.json`),
 envia frames JSON e consome eventos do `AgentLoop` via callbacks.
+
+Cada operação pública (`connect`, `create`, `submit`, `command`) roda dentro de
+um único `asyncio.run()` e lê os frames WS necessários na mesma corrotina, então
+não há estado de loop de eventos compartilhado entre chamadas.
 
 `ensure_gateway()` sobe o daemon on-demand quando ele não está rodando.
 `--local` e `--print` nunca usam este cliente (in-process).
@@ -122,7 +126,6 @@ class GatewayClient:
         self._writer: asyncio.StreamWriter | None = None
         self._session_id: str | None = None
         self.on_event: Callable[[str, dict], None] | None = None
-        self._recv_task: asyncio.Task | None = None
 
     # -- conexão ------------------------------------------------------- #
 
@@ -143,43 +146,59 @@ class GatewayClient:
         if not await _ws_client_handshake(reader, writer):
             writer.close()
             raise ConnectionError("Handshake WebSocket falhou.")
-        self._recv_task = asyncio.create_task(self._recv_loop())
 
     async def close(self) -> None:
-        """Desconecta (detach) e fecha o socket."""
-        if self._recv_task:
-            self._recv_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self._recv_task
+        """Fecha o socket (detach)."""
         if self._writer:
             with contextlib.suppress(OSError):
                 self._writer.write(b"\x88\x00")  # close frame
                 self._writer.close()
+        self._reader = None
+        self._writer = None
 
-    async def _recv_loop(self) -> None:
-        """Lê frames do servidor e despacha para on_event."""
+    # -- leitura de frames -------------------------------------------- #
+
+    async def _read_until(
+        self, predicate, timeout: float = 30.0
+    ) -> list[dict[str, Any]]:
+        """Lê frames até `predicate(msg)` ser True, devolvendo todos lidos."""
         assert self._reader is not None
+        mensagens: list[dict[str, Any]] = []
+        loop = asyncio.get_event_loop()
+        fim = loop.time() + timeout
         while True:
-            text = await _ws_client_read_frame(self._reader)
-            if text is None:
+            restante = fim - loop.time()
+            if restante <= 0:
                 break
             try:
-                msg = json.loads(text)
+                texto = await asyncio.wait_for(
+                    _ws_client_read_frame(self._reader), timeout=restante
+                )
+            except TimeoutError:
+                break
+            if texto is None:
+                break
+            try:
+                msg = json.loads(texto)
             except ValueError:
                 continue
-            action = msg.get("action")
-            if action == "event" and self.on_event:
-                self.on_event(msg.get("event", ""), msg.get("data", {}))
-            elif action == "attached":
-                self._session_id = msg.get("session")
+            mensagens.append(msg)
+            if predicate(msg):
+                break
+        return mensagens
 
-    # -- envio --------------------------------------------------------- #
+    # -- envio + leitura ---------------------------------------------- #
 
     async def _send(self, obj: dict[str, Any]) -> None:
         if not self._writer:
             raise ConnectionError("não conectado ao gateway")
         self._writer.write(_ws_client_frame(json.dumps(obj, ensure_ascii=False)))
         await self._writer.drain()
+
+    async def _dispatch_event(self, msg: dict[str, Any]) -> None:
+        """Despacha um evento do gateway para on_event."""
+        if msg.get("action") == "event" and self.on_event:
+            self.on_event(msg.get("event", ""), msg.get("data", {}))
 
     async def create(self, session_id: str | None = None, **config_overrides) -> str:
         """Cria uma sessão no gateway. Devolve o session_id."""
@@ -190,41 +209,73 @@ class GatewayClient:
                 **config_overrides,
             }
         )
-        # Aguarda o attached para saber o session_id real.
-        # (simplificação: aguarda o recv_loop preencher _session_id)
-        for _ in range(100):
-            await asyncio.sleep(0.05)
-            if self._session_id:
+
+        def é_attached(msg: dict) -> bool:
+            return msg.get("action") == "attached"
+
+        mensagens = await self._read_until(é_attached, timeout=10.0)
+        for msg in mensagens:
+            await self._dispatch_event(msg)
+        for msg in mensagens:
+            if msg.get("action") == "attached":
+                self._session_id = msg.get("session") or session_id
                 return self._session_id
         raise TimeoutError("gateway não confirmou a criação da sessão")
 
     async def attach(self, session_id: str) -> None:
         """Anexa a uma sessão existente."""
         await self._send({"action": "attach", "session": session_id})
+
+        def é_attached(msg: dict) -> bool:
+            return msg.get("action") == "attached"
+
+        mensagens = await self._read_until(é_attached, timeout=10.0)
+        for msg in mensagens:
+            await self._dispatch_event(msg)
         self._session_id = session_id
 
     async def submit(self, prompt: str) -> None:
-        """Enfileira um prompt para execução no gateway."""
+        """Enfileira um prompt para execução e aguarda eventos até o turno."""
         if not self._session_id:
             raise RuntimeError("nenhuma sessão anexada/criada")
-        await self._send({"action": "submit", "session": self._session_id, "prompt": prompt})
+        await self._send(
+            {"action": "submit", "session": self._session_id, "prompt": prompt}
+        )
 
-    async def cancel(self) -> None:
-        if self._session_id:
-            await self._send({"action": "cancel", "session": self._session_id})
+        def é_turn_done(msg: dict) -> bool:
+            return msg.get("action") == "turn_done"
 
-    async def detach(self) -> None:
-        if self._session_id:
-            await self._send({"action": "detach", "session": self._session_id})
-        await self.close()
+        mensagens = await self._read_until(é_turn_done, timeout=120.0)
+        for msg in mensagens:
+            await self._dispatch_event(msg)
 
-    async def list_sessions(self) -> list[str]:
-        await self._send({"action": "list_sessions"})
-        # simplificação: devolve vazio (o attached já traz o snapshot)
-        return []
+    async def command(self, nome: str, argumentos: str = "") -> str:
+        """Executa um comando de sessão (/tools, /ext, /budget, /new)."""
+        if not self._session_id:
+            raise RuntimeError("nenhuma sessão anexada/criada")
+        await self._send(
+            {
+                "action": "command",
+                "session": self._session_id,
+                "nome": nome,
+                "argumentos": argumentos,
+            }
+        )
+
+        def é_result(msg: dict) -> bool:
+            return msg.get("action") == "command_result"
+
+        mensagens = await self._read_until(é_result, timeout=10.0)
+        for msg in mensagens:
+            await self._dispatch_event(msg)
+        for msg in mensagens:
+            if msg.get("action") == "command_result":
+                return msg.get("resultado", "")
+        return ""
 
     async def ping(self) -> None:
         await self._send({"action": "ping"})
+        await self._read_until(lambda m: m.get("action") == "pong", timeout=5.0)
 
 
 # ---------------------------------------------------------------------- #
@@ -232,11 +283,20 @@ class GatewayClient:
 # ---------------------------------------------------------------------- #
 
 
-def ensure_gateway(cwd: Path | str) -> bool:
-    """Sobe o daemon on-demand se não estiver rodando. Devolve True se ativo."""
+def ensure_gateway(cwd: Path | str, auto_start: bool = False) -> bool:
+    """Verifica (e, opcionalmente, sobe) o daemon do workdir.
+
+    Por padrão (auto_start=False) apenas verifica se já há um gateway rodando;
+    não sobe subprocesso. Isso evita travar ambientes de teste e scripts que
+    nunca devem depender do daemon. Use `formiga gateway start` para subir
+    manualmente, ou auto_start=True para on-demand.
+    """
     cwd = Path(cwd).resolve()
     if _read_pidfile(cwd) and _process_alive(_read_pidfile(cwd).get("pid", 0)):
         return True
+
+    if not auto_start:
+        return False
 
     # Lança o servidor detached.
     cmd = [sys.executable, "-m", "formiga.agent.gateway", "--serve", str(cwd)]

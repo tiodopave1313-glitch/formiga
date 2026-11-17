@@ -457,7 +457,12 @@ class Gateway:
         sess = self.sessions.get(session_id)
         if not sess:
             return
-        sess.run_pending()
+        try:
+            sess.run_pending()
+        except Exception:  # noqa: BLE001 — não derruba o gateway por um turno falho.
+            import traceback
+
+            traceback.print_exc()
         # Notifica clientes que a sessão ficou ociosa (snapshot atualizado).
         snapshot = self._snapshot(session_id)
         for writer in list(self.clients.get(session_id, set())):

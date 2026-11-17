@@ -184,6 +184,19 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Diretório de sessão (default: sessoes/<timestamp_id> sob ./sessoes).",
     )
+    agente_retoma = agent.add_mutually_exclusive_group()
+    agente_retoma.add_argument(
+        "--continue",
+        dest="continue_mode",
+        action="store_true",
+        help="Retoma a última sessão do workdir (in-process).",
+    )
+    agente_retoma.add_argument(
+        "--resume",
+        dest="resume_id",
+        metavar="ID",
+        help="Retoma a sessão com o ID informado (in-process).",
+    )
     agent.add_argument("--config", default=None, help="Arquivo de configuração TOML.")
     _add_llm_args(agent)
     agent.add_argument(
@@ -340,6 +353,9 @@ def main(argv: list[str] | None = None) -> int:
             return _run_print(config, session, args)
         if args.tui_mode:
             return _run_tui(config, session, args)
+
+        if args.continue_mode or args.resume_id:
+            return _run_resume(config, session, args)
 
         return _run_interactive(config, session, args)
 
@@ -616,6 +632,148 @@ def _run_interactive(config: Config, session: Session, args) -> int:
 
     asyncio.run(_main_gateway())
     return EXIT_OK
+
+    asyncio.run(_main_gateway())
+    return EXIT_OK
+
+
+def _run_resume(config: Config, session: Session, args) -> int:
+    """Retoma uma sessão existente (in-process).
+
+    Carrega `messages.json` da sessão e continua o loop interativo
+    a partir do histórico salvo.
+    """
+    base_dir = args.session_dir or Path("sessoes")
+
+    # Determina o session_id: --resume <id> ou a última sessão do workdir.
+    if args.resume_id:
+        session_id = args.resume_id
+    else:
+        sessoes = Session.list_sessions(base_dir)
+        if not sessoes:
+            print(f"Nenhuma sessão encontrada em {base_dir}.", file=sys.stderr)
+            return EXIT_INVALID_INPUT
+        session_id = sessoes[-1].session_id  # a mais recente (listadas ordenadas)
+
+    session = Session(base_dir, session_id=session_id)
+    transcript_path = session.transcript_path
+    print(f"formiga agent · retomando sessão: {session.dir}")
+    print(f"transcript: {transcript_path} · Ctrl+C interrompe a resposta · Ctrl+D sai")
+
+    loop = build_agent(config, session)
+
+    # Substitui as mensagens só-system pelas mensagens salvas da sessão.
+    mensagens_salvas = session.load_messages()
+    if mensagens_salvas:
+        loop.messages = mensagens_salvas
+    else:
+        print("Sessão vazia; iniciando do zero.", file=sys.stderr)
+
+    budget_snapshot: dict = {}
+
+    def _exibe_evento(event: str, data: dict) -> None:
+        nonlocal budget_snapshot
+        if event == "stream":
+            sys.stdout.write(data.get("text", ""))
+            sys.stdout.flush()
+        elif event == "tool_start":
+            sys.stdout.write(f"\n⚙ {data.get('tool')} — {data.get('args', '')}")
+            sys.stdout.flush()
+        elif event == "tool_end":
+            if data.get("budget_exhausted"):
+                sys.stdout.write(f"  (⚙ {data.get('tool')} — orçamento esgotado)")
+            elif not data.get("ok", True):
+                seconds = data.get("seconds")
+                dur = f" ({seconds:.1f} s)" if isinstance(seconds, (int, float)) else ""
+                sys.stdout.write(f"  ✗ erro{dur}")
+            else:
+                seconds = data.get("seconds")
+                if isinstance(seconds, (int, float)):
+                    sys.stdout.write(f"  ({seconds:.1f} s)")
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+        elif event == "tool_progress":
+            sys.stdout.write(f"· {data.get('message', '')}\n")
+            sys.stdout.flush()
+        elif event == "notification":
+            sys.stdout.write(f"ℹ {data.get('text', '')}\n")
+            sys.stdout.flush()
+        elif event == "extension_status":
+            sys.stdout.write(f"· {data.get('key')}: {data.get('text', '')}\n")
+            sys.stdout.flush()
+        elif event == "budget":
+            budget_snapshot = data
+        elif event == "run_final" and not data.get("streamed"):
+            if budget_snapshot:
+                t = budget_snapshot.get("turns", 0)
+                mt = budget_snapshot.get("max_turns", 0)
+                lc = budget_snapshot.get("llm_calls", 0)
+                mlc = budget_snapshot.get("max_llm_calls", 0)
+                ctx = budget_snapshot.get("context_tokens", 0)
+                mctx = budget_snapshot.get("max_context_tokens", 0)
+                ext = budget_snapshot.get("ext", 0)
+                sys.stdout.write(
+                    f"\nturnos {t}/{mt} · llm {lc}/{mlc} · "
+                    f"ctx {ctx}/{mctx} · ext {ext} ferramentas\n"
+                )
+                sys.stdout.flush()
+        elif event == "interrupted":
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+
+    def _imprime_orcamento() -> None:
+        if budget_snapshot:
+            t = budget_snapshot.get("turns", 0)
+            mt = budget_snapshot.get("max_turns", 0)
+            lc = budget_snapshot.get("llm_calls", 0)
+            mlc = budget_snapshot.get("max_llm_calls", 0)
+            ctx = budget_snapshot.get("context_tokens", 0)
+            mctx = budget_snapshot.get("max_context_tokens", 0)
+            ext = budget_snapshot.get("ext", 0)
+            sys.stdout.write(
+                f"\nturnos {t}/{mt} · llm {lc}/{mlc} · "
+                f"ctx {ctx}/{mctx} · ext {ext} ferramentas\n"
+            )
+            sys.stdout.flush()
+
+    loop.on_event = _exibe_evento
+
+    while True:
+        try:
+            q = input("\npergunta> ")
+        except EOFError:
+            print(f"\nSaindo. Sessão salva em {transcript_path}")
+            return EXIT_OK
+        except KeyboardInterrupt:
+            print()
+            return EXIT_OK
+
+        if not q.strip():
+            continue
+
+        if q.startswith("/"):
+            corpo = q[1:].strip()
+            if not corpo:
+                continue
+            partes = corpo.split(None, 1)
+            nome = partes[0]
+            argumentos = partes[1] if len(partes) > 1 else ""
+            try:
+                resultado = loop.registry.dispatch_command(nome, argumentos)
+            except KeyError:
+                print(f"Comando desconhecido: /{nome}")
+                continue
+            print(resultado)
+            continue
+
+        try:
+            loop.run(q)
+            _imprime_orcamento()
+        except LLMError as exc:
+            print(f"\n✗ erro: {exc}")
+            continue
+        except KeyboardInterrupt:
+            continue  # loop trata internamente; volta ao prompt
 
 
 if __name__ == "__main__":  # pragma: no cover
