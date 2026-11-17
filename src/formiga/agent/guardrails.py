@@ -2,6 +2,9 @@
 
 Controla orçamento (turnos, chamadas ao LLM, tempo), cap de resultados de
 ferramenta e anti-loop (ladder: 2 chamadas idênticas → nudge; 4 → encerra turno).
+
+O orçamento por ferramenta pertence ao registry (declarado por extensão na
+inscrição); os guardrails não conhecem nomes de ferramentas.
 """
 
 from __future__ import annotations
@@ -50,13 +53,24 @@ class AgentBudget:
 
 @dataclass
 class ToolResultCap:
-    """Limite de tamanho do retorno de uma ferramenta."""
+    """Limite de tamanho do retorno de uma ferramenta.
+
+    O valor padrão vem da configuração do agente; exceções por ferramenta
+    são declaradas no registro (cap da extensão), não aqui.
+    """
 
     default_chars: int = 4000
-    bash_chars: int = 8000
 
-    def cap_for(self, tool_name: str) -> int:
-        return self.bash_chars if tool_name == "bash" else self.default_chars
+    def cap_for(self, tool_name: str, default_chars: int | None = None) -> int:
+        """Retorna o cap para a ferramenta.
+
+        `tool_name` é aceito por compatibilidade, mas o limite aplicado é
+        o valor informado (ou o default deste objeto); o registry é quem
+        declara exceções (ex.: bash com 8 000 chars).
+        """
+        if default_chars is not None:
+            return default_chars
+        return self.default_chars
 
 
 @dataclass
@@ -98,75 +112,31 @@ class AntiLoop:
 
 @dataclass
 class ToolBudgets:
-    """Orçamentos de ferramentas web por mensagem do usuário (seção 7).
+    """Orçamentos por mensagem do usuário, gerenciados pelo registry.
 
-    Esgotar um orçamento devolve `ERRO:` orçamental ao modelo — não encerra
-    a sessão. Reinicializado a cada nova mensagem (`AgentLoop.run`).
+    `limits` é um mapa `nome_da_tool -> limite` (declarado na inscrição da
+    extensão). Esgotar um orçamento devolve `ERRO:` orçamental ao modelo —
+    não encerra a sessão. Reinicializado a cada nova mensagem
+    (`AgentLoop.run`).
     """
 
-    max_deep_searches: int = 2
-    max_web_searches: int = 6
-    max_web_fetches: int = 8
     limits: dict[str, int] = field(default_factory=dict)
     used: dict[str, int] = field(default_factory=dict)
 
-    deep_searches_used: int = 0
-    web_searches_used: int = 0
-    web_fetches_used: int = 0
-
     def consume(self, resource: str, limit: int | None = None) -> str | None:
         """Consome uma unidade do orçamento. Retorna `ERRO:` se esgotado."""
-        if resource in self.limits or limit is not None:
-            maximum = self.limits.get(resource, limit)
-            assert maximum is not None
-            used = self.used.get(resource, 0)
-            if used >= maximum:
-                return (
-                    f"ERRO: orçamento de {resource} esgotado "
-                    f"({maximum} por mensagem)."
-                )
-            self.used[resource] = used + 1
-            # Espelha os nomes históricos usados por integrações e testes.
-            if resource == "deep_search":
-                self.deep_searches_used = self.used[resource]
-            elif resource == "web_search":
-                self.web_searches_used = self.used[resource]
-            elif resource == "web_fetch":
-                self.web_fetches_used = self.used[resource]
+        if limit is None:
+            limit = self.limits.get(resource)
+        if limit is None:
             return None
-        if resource == "deep_search":
-            if self.deep_searches_used >= self.max_deep_searches:
-                return (
-                    f"ERRO: orçamento de deep_search esgotado "
-                    f"({self.max_deep_searches} por mensagem)."
-                )
-            self.deep_searches_used += 1
-        elif resource == "web_search":
-            if self.web_searches_used >= self.max_web_searches:
-                return (
-                    f"ERRO: orçamento de web_search esgotado "
-                    f"({self.max_web_searches} por mensagem)."
-                )
-            self.web_searches_used += 1
-        elif resource == "web_fetch":
-            if self.web_fetches_used >= self.max_web_fetches:
-                return (
-                    f"ERRO: orçamento de web_fetch esgotado "
-                    f"({self.max_web_fetches} por mensagem)."
-                )
-            self.web_fetches_used += 1
-        else:
-            raise ValueError(f"Recurso desconhecido: {resource}")
+        if self.used.get(resource, 0) >= limit:
+            return (
+                f"ERRO: orçamento de {resource} esgotado "
+                f"({limit} por mensagem)."
+            )
+        self.used[resource] = self.used.get(resource, 0) + 1
         return None
 
     def remaining(self, resource: str) -> int:
-        if resource in self.limits:
-            return max(0, self.limits[resource] - self.used.get(resource, 0))
-        if resource == "deep_search":
-            return max(0, self.max_deep_searches - self.deep_searches_used)
-        if resource == "web_search":
-            return max(0, self.max_web_searches - self.web_searches_used)
-        if resource == "web_fetch":
-            return max(0, self.max_web_fetches - self.web_fetches_used)
-        raise ValueError(f"Recurso desconhecido: {resource}")
-
+        limit = self.limits.get(resource, 0)
+        return max(0, limit - self.used.get(resource, 0))

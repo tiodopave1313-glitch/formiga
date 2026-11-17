@@ -5,14 +5,18 @@ O loop controla orçamento, guardrails, persistência por turno e cancelamento
 cooperativo (`cancel()` sinaliza; ferramenta em curso termina no próprio
 timeout; o loop só confirma a interrupção na fronteira seguinte).
 
+O núcleo **não conhece nenhuma ferramenta concreta**: todas chegam pelo
+`ExtensionRegistry`, que é o único caminho do loop até uma tool
+(objetivo 3.1 do PRD v2).
+
 Eventos para a TUI (via `on_event`):
 - `llm_call`                — início de chamada ao modelo;
 - `stream`                  — pedaço de texto gerado (deltas do stream);
 - `tool_start`              — antes de executar a tool (args curtos);
 - `tool_end`                — após executar (ok, seconds, texto capado);
+- `tool_progress`           — progresso reexposto por uma ferramenta/extensão;
 - `budget`                  — snapshot de turnos/chamadas vs máximos;
 - `interrupted`             — interrupção confirmada pelo loop;
-- `deep_search_progress`    — progresso do motor (reexposto pela tool).
 """
 
 from __future__ import annotations
@@ -30,9 +34,8 @@ from formiga.agent.guardrails import (
     ToolResultCap,
 )
 from formiga.agent.parser import parse_tool_call, result_to_context
-from formiga.agent.prompts import SYSTEM_PROMPT
+from formiga.agent.prompts import build_system_prompt
 from formiga.agent.session import Session
-from formiga.agent.tools.base import Tool
 from formiga.config import Config
 from formiga.llm import LLMError
 
@@ -53,21 +56,14 @@ class AgentLoop:
     def __init__(
         self,
         chat_client,
-        tools: list[Tool],
+        registry: ExtensionRegistry,
         session: Session,
         config: Config,
         on_event: Callable[[str, dict], None] | None = None,
-        registry: ExtensionRegistry | None = None,
     ) -> None:
         self.chat = chat_client
-        self.registry = registry or ExtensionRegistry()
-        if registry is None:
-            for tool in tools:
-                budget = getattr(tool, "budget_per_message", None)
-                if config_attr := getattr(tool, "budget_config_attr", None):
-                    budget = int(getattr(config, config_attr))
-                self.registry.register_tool(tool, budget_per_message=budget)
-        self.tools = self.registry.tools
+        self.registry = registry
+        self.tools = registry.tools
         self.session = session
         self.config = config
         self.on_event = on_event or (lambda *a, **k: None)
@@ -84,19 +80,20 @@ class AgentLoop:
             default_chars=int(getattr(agent_cfg, "agent_tool_result_chars", 4000)),
         )
         self.anti_loop = AntiLoop()
+        # Orçamentos por mensagem declarados pelas extensões no registry.
         self.tool_budgets = ToolBudgets(
-            max_deep_searches=int(getattr(agent_cfg, "agent_max_deep_searches", 2)),
-            max_web_searches=int(getattr(agent_cfg, "agent_max_web_searches", 6)),
-            max_web_fetches=int(getattr(agent_cfg, "agent_max_web_fetches", 8)),
+            limits={
+                name: registration.budget_per_message
+                for name, registration in registry.registrations.items()
+                if registration.budget_per_message is not None
+            }
         )
-        self.registry_budget_limits = {
-            name: registration.budget_per_message
-            for name, registration in self.registry.registrations.items()
-            if registration.budget_per_message is not None
-        }
-        self.tool_budgets.limits = dict(self.registry_budget_limits)
 
-        self.messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
+        # system prompt montado a partir dos specs do registry — nenhuma
+        # ferramenta concreta é citada pelo núcleo.
+        self.messages: list[dict] = [
+            {"role": "system", "content": build_system_prompt(registry)}
+        ]
 
         # Índice do início do turno de tool ainda não confirmado pelo
         # modelo — usado para rollback se a chamada seguinte falhar.
@@ -156,7 +153,7 @@ class AgentLoop:
                 seconds = data.get("seconds")
                 if isinstance(seconds, (int, float)):
                     self.session.append_transcript(f"  ({seconds:.1f} s)\n")
-        elif event == "deep_search_progress":
+        elif event == "tool_progress":
             self.session.append_transcript(f"· {data.get('message', '')}\n")
         elif event == "interrupted":
             self.session.append_transcript("\n— interrompido pelo usuário —\n")
@@ -181,7 +178,7 @@ class AgentLoop:
         """Executa o loop até resposta final, orçamento esgotado ou interrupção.
 
         Cada chamada a `run` é uma nova mensagem do usuário: os orçamentos de
-        ferramentas web são reiniciados (seção 7 do PRD). Um cancelamento
+        ferramentas são reiniciados (seção 7 do PRD). Um cancelamento
         pendente (`cancel()`) é honrado imediatamente; a flag é limpa ao fim.
         """
         try:
@@ -190,12 +187,13 @@ class AgentLoop:
             self._cancel.clear()
 
     def _run(self, question: str) -> str:
-        # Reinicia orçamentos de tools web por mensagem do usuário.
+        # Reinicia orçamentos de ferramentas por mensagem do usuário.
         self.tool_budgets = ToolBudgets(
-            max_deep_searches=self.tool_budgets.max_deep_searches,
-            max_web_searches=self.tool_budgets.max_web_searches,
-            max_web_fetches=self.tool_budgets.max_web_fetches,
-            limits=dict(self.registry_budget_limits),
+            limits={
+                name: registration.budget_per_message
+                for name, registration in self.registry.registrations.items()
+                if registration.budget_per_message is not None
+            }
         )
         self.anti_loop = AntiLoop()
         self._pending_len = None  # nenhum turno de tool pendente
@@ -334,10 +332,7 @@ class AgentLoop:
 
         # Orçamento por mensagem declarado pela extensão no registry; nenhuma
         # lista de ferramentas especiais fica hardwired no loop.
-        budget_err = None
-        budget_limit = self.registry.budget_for(name)
-        if budget_limit is not None:
-            budget_err = self.tool_budgets.consume(name, budget_limit)
+        budget_err = self.registry.consume_message_budget(name, self.tool_budgets)
         if budget_err is not None:
             self.session.append_event(
                 "tool_call",
@@ -363,8 +358,8 @@ class AgentLoop:
         result = tool.execute(**args)
         elapsed = monotonic() - started
 
-        # cap de resultado
-        cap = self.tool_cap.cap_for(name)
+        # cap de resultado: declaração da extensão no registry ou default.
+        cap = self.registry.cap_for(name, self.tool_cap.default_chars)
         text = result.text
         if len(text) > cap:
             text = text[:cap] + f"\n…(truncado a {cap} chars)"

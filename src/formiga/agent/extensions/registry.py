@@ -1,17 +1,20 @@
-"""Registry mínimo de ferramentas extensíveis para o agente.
+"""Registry e runtime de extensões do agente.
 
-A fase 1 mantém a API deliberadamente pequena: descoberta e comandos chegam na
-fase seguinte; por enquanto a fábrica instancia extensões builtin via `setup`.
+O registry mantém ferramentas, comandos, handlers e metadados em ordem de carga.
+Nenhum módulo de extensão concreta é importado daqui.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
 
+from formiga.agent.guardrails import ToolBudgets
 from formiga.agent.tools.base import Tool
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from formiga.agent.session import Session
     from formiga.config import Config
 
@@ -21,13 +24,71 @@ class ToolRegistration:
     tool: Tool
     budget_per_message: int | None = None
     category: str = "general"
+    extension: str = "legacy"
+    source: str = "runtime"
+    lazy: bool = False
+    cap_chars: int | None = None
+    prompt_hint: str | None = None
+
+
+@dataclass(frozen=True)
+class CommandRegistration:
+    name: str
+    handler: Callable[[str], object]
+    extension: str = "unknown"
+    source: str = "unknown"
+
+
+@dataclass
+class ExtensionRecord:
+    name: str
+    source: str
+    order: int
+    status: str = "loaded"
+    error: str | None = None
+    tools: list[str] = field(default_factory=list)
+    commands: list[str] = field(default_factory=list)
 
 
 class ExtensionRegistry:
-    """Registro ordenado das ferramentas anunciadas por extensões."""
+    """Registro ordenado de ferramentas, comandos e hooks de extensão."""
+
+    CHAIN_EVENTS = frozenset(
+        {"input", "before_agent_start", "context", "tool_call", "tool_result", "turn_end"}
+    )
+    OBSERVATION_EVENTS = frozenset(
+        {
+            "llm_call",
+            "stream",
+            "tool_start",
+            "tool_end",
+            "budget",
+            "interrupted",
+            "extension_loaded",
+            "deep_search_progress",
+        }
+    )
 
     def __init__(self) -> None:
         self._tools: dict[str, ToolRegistration] = {}
+        self._commands: dict[str, CommandRegistration] = {}
+        self._extensions: list[ExtensionRecord] = []
+        self._handlers: dict[str, list[tuple[str, Callable[..., object]]]] = {}
+        self._event_sink: Callable[[str, dict], None] = lambda *_: None
+        self._session: Session | None = None
+        self.warnings: list[str] = []
+
+    def bind_runtime(
+        self,
+        session: Session,
+        event_sink: Callable[[str, dict], None] | None = None,
+    ) -> None:
+        self._session = session
+        if event_sink is not None:
+            self._event_sink = event_sink
+
+    def set_event_sink(self, event_sink: Callable[[str, dict], None]) -> None:
+        self._event_sink = event_sink
 
     def register_tool(
         self,
@@ -35,6 +96,11 @@ class ExtensionRegistry:
         *,
         budget_per_message: int | None = None,
         category: str = "general",
+        lazy: bool = False,
+        extension: str = "legacy",
+        source: str = "runtime",
+        cap_chars: int | None = None,
+        prompt_hint: str | None = None,
     ) -> None:
         if not getattr(tool, "name", None):
             raise ValueError("ferramenta precisa declarar um nome não vazio")
@@ -46,50 +112,179 @@ class ExtensionRegistry:
             tool=tool,
             budget_per_message=budget_per_message,
             category=category,
+            extension=extension,
+            source=source,
+            lazy=lazy,
+            cap_chars=cap_chars,
+            prompt_hint=prompt_hint,
         )
+
+    def register_command(
+        self,
+        name: str,
+        handler: Callable[[str], object],
+        *,
+        extension: str = "unknown",
+        source: str = "unknown",
+    ) -> None:
+        normalized = name.strip().lstrip("/")
+        if not normalized or any(char.isspace() for char in normalized):
+            raise ValueError("nome de comando inválido")
+        if normalized in self._commands:
+            raise ValueError(f"comando duplicado: /{normalized}")
+        self._commands[normalized] = CommandRegistration(
+            normalized, handler, extension=extension, source=source
+        )
+
+    def register_extension(self, record: ExtensionRecord) -> None:
+        self._extensions.append(record)
+
+    def add_handler(
+        self,
+        event: str,
+        handler: Callable[..., object],
+        *,
+        extension: str = "unknown",
+    ) -> None:
+        if event not in self.CHAIN_EVENTS | self.OBSERVATION_EVENTS:
+            raise ValueError(f"evento não suportado: {event}")
+        self._handlers.setdefault(event, []).append((extension, handler))
+
+    def observe(self, event: str, data: dict) -> None:
+        """Executa handlers de observação isolando falhas por extensão."""
+        for extension, handler in self._handlers.get(event, ()):
+            try:
+                handler(data)
+            except Exception as exc:  # extensões não derrubam o loop
+                self._extension_error(extension, event, exc)
+
+    def chain(self, event: str, value: Any, **context: Any) -> Any:
+        """Aplica transformações encadeadas e isola erros de handlers."""
+        for extension, handler in self._handlers.get(event, ()):
+            try:
+                result = (
+                    handler(value, **context)
+                    if event == "tool_call"
+                    else handler(value)
+                )
+                if result is not None:
+                    value = result
+                if event == "tool_call" and isinstance(value, dict) and value.get("block"):
+                    break
+            except Exception as exc:
+                self._extension_error(extension, event, exc)
+        return value
+
+    def emit(self, event: str, data: dict | None = None) -> None:
+        """Emite evento customizado para JSONL, handlers e interface."""
+        payload = dict(data or {})
+        if self._session is not None:
+            self._session.append_event(event, payload)
+        self._event_sink(event, payload)
+
+    def dispatch_command(self, name: str, arguments: str = "") -> object:
+        registration = self._commands.get(name.lstrip("/"))
+        if registration is None:
+            raise KeyError(name)
+        return registration.handler(arguments)
+
+    def _extension_error(self, extension: str, event: str, exc: Exception) -> None:
+        message = f"{type(exc).__name__}: {exc}"[:400]
+        self.warnings.append(f"{extension}: {message}")
+        if self._session is not None:
+            self._session.append_event(
+                "extension_error", {"extension": extension, "event": event, "message": message}
+            )
 
     @property
     def tools(self) -> dict[str, Tool]:
         """Ferramentas indexadas por nome, em ordem de registro."""
-        return {name: registration.tool for name, registration in self._tools.items()}
+        return {name: item.tool for name, item in self._tools.items()}
 
     @property
     def registrations(self) -> dict[str, ToolRegistration]:
         return dict(self._tools)
 
     @property
+    def commands(self) -> dict[str, CommandRegistration]:
+        return dict(self._commands)
+
+    @property
+    def extensions(self) -> tuple[ExtensionRecord, ...]:
+        return tuple(self._extensions)
+
+    @property
     def schemas(self) -> list[dict]:
-        return [registration.tool.schema() for registration in self._tools.values()]
+        return [item.tool.schema() for item in self._tools.values() if not item.lazy]
 
     def budget_for(self, name: str) -> int | None:
         registration = self._tools.get(name)
         return registration.budget_per_message if registration else None
 
-    def reset_budgets(self) -> None:
-        """Inicia uma mensagem do usuário sem consumo de budget no registry.
+    def cap_for(self, name: str, default_chars: int = 4000) -> int:
+        registration = self._tools.get(name)
+        if registration is None or registration.cap_chars is None:
+            return default_chars
+        return registration.cap_chars
 
-        Contadores são mantidos no `ToolBudgets` legado nesta fase para
-        compatibilidade de observabilidade; o registry passa a ser a fonte da
-        política (quais ferramentas têm orçamento e seus limites).
+    def consume_message_budget(
+        self, name: str, tool_budgets: ToolBudgets
+    ) -> str | None:
+        """Consome uma unidade do orçamento declarado da ferramenta.
+
+        Retorna `None` se não houver orçamento declarado ou se ainda houver
+        unidade disponível; caso contrário devolve a mensagem `ERRO:`.
         """
-        return None
+        limit = self.budget_for(name)
+        if limit is None:
+            return None
+        return tool_budgets.consume(name, limit)
+
+    def reset_message_budgets(self) -> None:
+        """Zera os contadores de uso (chamado a cada nova mensagem do usuário).
+
+        A zeragem real é feita no loop recriando `ToolBudgets`; este método
+        existe para simetria e futuro uso por hooks de contexto.
+        """
+        pass
 
     def __len__(self) -> int:
         return len(self._tools)
 
 
+class ExtensionUI:
+    """Feedback visual não acoplado à CLI ou à TUI."""
+
+    def __init__(self, registry: ExtensionRegistry) -> None:
+        self._registry = registry
+
+    def notify(self, text: str, level: str = "info") -> None:
+        self._registry.emit("notification", {"text": str(text), "level": level})
+
+    def setStatus(self, key: str, text: str) -> None:  # noqa: N802 - API do PRD
+        self._registry.emit("extension_status", {"key": str(key), "text": str(text)})
+
+
 class ExtensionContext:
-    """Contexto fornecido a `setup(pi)` por uma extensão builtin."""
+    """Objeto `pi` entregue durante setup, com capacidades da extensão."""
 
     def __init__(
         self,
         registry: ExtensionRegistry,
         config: Config,
         session: Session,
+        *,
+        name: str = "builtin",
+        source: str = "builtin",
+        settings: dict[str, object] | None = None,
     ) -> None:
         self._registry = registry
-        self.config = config
+        self.runtime_config = config
+        self.config = dict(settings or {})
         self.session = session
+        self.name = name
+        self.source = source
+        self.ui = ExtensionUI(registry)
 
     def register_tool(
         self,
@@ -97,9 +292,24 @@ class ExtensionContext:
         *,
         budget_per_message: int | None = None,
         category: str = "general",
+        lazy: bool = False,
     ) -> None:
         self._registry.register_tool(
             tool,
             budget_per_message=budget_per_message,
             category=category,
+            lazy=lazy,
+            extension=self.name,
+            source=self.source,
         )
+
+    def register_command(self, name: str, handler: Callable[[str], object]) -> None:
+        self._registry.register_command(
+            name, handler, extension=self.name, source=self.source
+        )
+
+    def on(self, event: str, handler: Callable[..., object]) -> None:
+        self._registry.add_handler(event, handler, extension=self.name)
+
+    def emit(self, event: str, data: dict | None = None) -> None:
+        self._registry.emit(event, data)

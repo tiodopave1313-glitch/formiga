@@ -1,6 +1,16 @@
-"""System prompt do agente Formiga (PT-BR, seção 7 e 6.3 do PRD)."""
+"""System prompt do agente Formiga (PT-BR, seção 7 e 6.3 do PRD).
 
-SYSTEM_PROMPT = """\
+O texto base (regras de disciplina e formato de resposta) é estático. A lista
+de ferramentas disponíveis é montada dinamicamente a partir dos registros do
+registry (`build_system_prompt`), para que nenhuma ferramenta concreta seja
+conhecida pelo núcleo do agente.
+"""
+
+from __future__ import annotations
+
+from formiga.agent.extensions.registry import ExtensionRegistry
+
+BASE = """\
 Você é o Formiga Agent, um harness agêntico mínimo. Você executa tarefas por
 meio de ferramentas, uma por iteração.
 
@@ -16,54 +26,64 @@ REGRAS DE DISCIPLINA:
 
 FERRAMENTAS DISPONÍVEIS (escolha UMA por iteração):
 
-1) `ls` — Lista o conteúdo de um diretório (caminho relativo dentro do
-   workdir).
-   Parâmetros: { path? (string) }
-
-2) `read` — Lê um arquivo de texto, linhas numeradas; retorno limitado a
-   4.000 chars.
-   Parâmetros: { path (string), offset? (integer, default 1),
-   limit? (integer) }
-
-3) `write` — Cria ou sobrescreve um arquivo. Se o arquivo já existir, recusa:
-   use `edit`.
-   Parâmetros: { path (string), content (string) }
-
-4) `edit` — Substitui `old_string` por `new_string`. PATCH-first: nunca
-   reescreve o arquivo inteiro. `old_string` deve aparecer exatamente uma vez.
-   Parâmetros: { path (string), old_string (string), new_string (string) }
-
-5) `bash` — Executa um comando no diretório de trabalho fixo (timeout 60 s,
-   saída limitada a 8.000 chars).
-   Parâmetros: { command (string), timeout? (integer) }
-   Recusa comandos perigosos (rm -rf /, mkfs, dd, shutdown, desinstalação,
-   mutação fora do workdir).
-
-6) `web_search` — Busca rápida na web (SearXNG). Retorna `título — url` +
-   snippet, limitado a 4.000 chars.
-   Parâmetros: { query (string), max_results? (integer, default 6) }
-   Use para checar 1–2 fatos quando snippets bastam.
-
-7) `web_fetch` — Baixa e extrai o texto principal de uma URL pública
-   (http/https).
-   Parâmetros: { url (string) }
-   Bloqueia localhost e redes privadas. Use para ler uma URL específica
-   informada pelo usuário.
-
-8) `deep_search` — Pesquisa profunda controlada pelo programa (até 12 buscas,
-   18 páginas). Retorna resumo + fontes `[S#]` + caminho do `report.md`.
-   Parâmetros: { question (string) }
-   Use quando a pergunta pedir uma resposta fundamentada com referências e
-   relatório.
-
-GUIA DE ESCOLHA DE WEB:
-- Fato pontual, 1–2 checagens, snippets bastam → `web_search` (e `web_fetch`
-  em 1–2 URLs promissoras).
-- URL específica informada pelo usuário → `web_fetch` direto.
-- Resposta com referências/evidências/relatório → `deep_search`.
+{ferramentas}
 
 FORMATO DE RESPOSTA:
 - Se precisar chamar uma ferramenta, chame apenas uma e aguarde o resultado.
 - Quando a tarefa estiver completa, responda em texto final, em português,
   fundamentado nos resultados das ferramentas.
 """
+
+
+def _parameter_resumo(parameters: dict) -> str:
+    """Renderiza um resumo legível do JSON Schema de parâmetros."""
+    props = parameters.get("properties", {}) or {}
+    required = set(parameters.get("required", []) or [])
+    if not props:
+        return "sem parâmetros."
+    partes = []
+    for nome, spec in props.items():
+        tipo = spec.get("type", "?")
+        obrigatorio = "obrigatório" if nome in required else "opcional"
+        descricao = spec.get("description", "")
+        trecho = f"`{nome}` ({tipo}, {obrigatorio})"
+        if descricao:
+            trecho += f" — {descricao}"
+        default = spec.get("default")
+        if default is not None:
+            trecho += f" (default {default})"
+        partes.append(trecho)
+    return "; ".join(partes) + "."
+
+
+def build_system_prompt(registry: ExtensionRegistry) -> str:
+    """Monta o system prompt a partir dos specs registrados no registry.
+
+    Cada ferramenta ativa (não lazy) gera um parágrafo numerado com nome,
+    descrição, parâmetros e, quando houver, o `prompt_hint` contribuído pela
+    extensão. A ordem de exibição segue a ordem de carga do registry.
+    """
+    specs = [
+        item
+        for item in registry.registrations.values()
+        if not item.lazy
+    ]
+    if not specs:
+        ferramentas = "(nenhuma ferramenta ativa — responda diretamente ao usuário.)"
+    else:
+        linhas = []
+        for indice, registro in enumerate(specs, start=1):
+            tool = registro.tool
+            linhas.append(
+                f"{indice}) `{tool.name}` — {tool.description}\n"
+                f"   Parâmetros: {_parameter_resumo(tool.parameters)}"
+            )
+            if registro.prompt_hint:
+                linhas.append(f"   {registro.prompt_hint}")
+        ferramentas = "\n\n".join(linhas)
+    return BASE.format(ferramentas=ferramentas)
+
+
+def system_prompt_com_extensoes(registry: ExtensionRegistry) -> str:
+    """Alias explícito para `build_system_prompt` (nome descritivo)."""
+    return build_system_prompt(registry)
