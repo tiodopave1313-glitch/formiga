@@ -248,6 +248,13 @@ class AgentApp(App):
         question = event.value.strip()
         if not question or self.controller.running:
             return
+        if question.startswith("/"):
+            resultado = self.controller.run_command(question)
+            if resultado is not None:
+                self._write_user_block("formiga", resultado)
+            event.input.value = ""
+            self._update_status()
+            return
         self._history.append(question)
         self._history_index = None
         event.input.value = ""

@@ -33,6 +33,45 @@ def build_agent(
     # somente builtin está ativa; pip/global/projeto entram na Fase 2.
     discover_extensions(config, session, registry)
 
+    # Comandos builtin /tools e /ext, disponíveis em qualquer sessão.
+    def _listar_tools(argumentos: str = "") -> str:
+        linhas = ["Ferramentas registradas:"]
+        if not registry.registrations:
+            linhas.append("  (nenhuma)")
+        for reg in registry.registrations.values():
+            partes = [f"- {reg.tool.name} — {reg.tool.description}"]
+            if reg.budget_per_message is not None:
+                partes.append(f"orçamento {reg.budget_per_message}/mensagem")
+            if reg.cap_chars is not None:
+                partes.append(f"cap {reg.cap_chars} chars")
+            partes.append(f"fonte {reg.source}")
+            linhas.append("  " + " | ".join(partes))
+        return "\n".join(linhas)
+
+    def _listar_extensoes(argumentos: str = "") -> str:
+        linhas = ["Extensões carregadas:"]
+        if not registry.extensions:
+            linhas.append("  (nenhuma)")
+        for rec in registry.extensions:
+            partes = [
+                f"- {rec.name} ({rec.source}, ordem {rec.order}, {rec.status})"
+            ]
+            if rec.tools:
+                partes.append(f"tools: {', '.join(rec.tools)}")
+            if rec.commands:
+                partes.append(f"comandos: {', '.join(rec.commands)}")
+            if rec.error:
+                partes.append(f"erro: {rec.error}")
+            linhas.append("  " + " | ".join(partes))
+        return "\n".join(linhas)
+
+    registry.register_command(
+        "tools", _listar_tools, extension="builtin", source="builtin"
+    )
+    registry.register_command(
+        "ext", _listar_extensoes, extension="builtin", source="builtin"
+    )
+
     return AgentLoop(
         chat_client,
         registry,

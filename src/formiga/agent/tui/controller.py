@@ -75,6 +75,23 @@ class AgentController:
         self.state = INTERRUPTING
         self.loop.cancel()
 
+    def run_command(self, line: str) -> str | None:
+        """Executa um comando `/...` registrado no registry.
+
+        Devolve o texto de saída para mostrar ao usuário, ou None quando a
+        linha não é um comando vazio de conteúdo.
+        """
+        corpo = line.lstrip("/").strip()
+        if not corpo:
+            return None
+        partes = corpo.split(None, 1)
+        nome = partes[0]
+        argumentos = partes[1] if len(partes) > 1 else ""
+        try:
+            return self.loop.registry.dispatch_command(nome, argumentos)
+        except KeyError:
+            return f"Comando desconhecido: /{nome}"
+
     # ------------------------------------------------------------------ #
     # Thread do controller
 

@@ -432,6 +432,21 @@ def _run_interactive(config: Config, session: Session, args) -> int:
         if not q.strip():
             continue
 
+        if q.startswith("/"):
+            corpo = q[1:].strip()
+            if not corpo:
+                continue
+            partes = corpo.split(None, 1)
+            nome = partes[0]
+            argumentos = partes[1] if len(partes) > 1 else ""
+            try:
+                resultado = loop.registry.dispatch_command(nome, argumentos)
+            except KeyError:
+                print(f"Comando desconhecido: /{nome}")
+                continue
+            print(resultado)
+            continue
+
         try:
             loop.run(q)
             # imprime linha de orçamento após cada turno completo
