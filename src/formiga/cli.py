@@ -401,6 +401,12 @@ def _run_interactive(config: Config, session: Session, args) -> int:
         elif event == "tool_progress":
             sys.stdout.write(f"· {data.get('message', '')}\n")
             sys.stdout.flush()
+        elif event == "notification":
+            sys.stdout.write(f"ℹ {data.get('text', '')}\n")
+            sys.stdout.flush()
+        elif event == "extension_status":
+            sys.stdout.write(f"· {data.get('key')}: {data.get('text', '')}\n")
+            sys.stdout.flush()
         elif event == "budget":
             budget_snapshot = data
         elif event == "run_final" and not data.get("streamed"):
@@ -411,7 +417,13 @@ def _run_interactive(config: Config, session: Session, args) -> int:
                 mt = budget_snapshot.get("max_turns", 0)
                 lc = budget_snapshot.get("llm_calls", 0)
                 mlc = budget_snapshot.get("max_llm_calls", 0)
-                sys.stdout.write(f"\nturnos {t}/{mt} · llm {lc}/{mlc}\n")
+                ctx = budget_snapshot.get("context_tokens", 0)
+                mctx = budget_snapshot.get("max_context_tokens", 0)
+                ext = budget_snapshot.get("ext", 0)
+                sys.stdout.write(
+                    f"\nturnos {t}/{mt} · llm {lc}/{mlc} · "
+                    f"ctx {ctx}/{mctx} · ext {ext} ferramentas\n"
+                )
                 sys.stdout.flush()
         elif event == "interrupted":
             sys.stdout.write("\n")
@@ -455,7 +467,13 @@ def _run_interactive(config: Config, session: Session, args) -> int:
             mt = b.get("max_turns", 0)
             lc = b.get("llm_calls", 0)
             mlc = b.get("max_llm_calls", 0)
-            sys.stdout.write(f"\nturnos {t}/{mt} · llm {lc}/{mlc}\n")
+            ctx = b.get("context_tokens", 0)
+            mctx = b.get("max_context_tokens", 0)
+            ext = b.get("ext", 0)
+            sys.stdout.write(
+                f"\nturnos {t}/{mt} · llm {lc}/{mlc} · "
+                f"ctx {ctx}/{mctx} · ext {ext} ferramentas\n"
+            )
             sys.stdout.flush()
         except LLMError as exc:
             print(f"\n✗ erro: {exc}")

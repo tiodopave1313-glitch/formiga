@@ -181,6 +181,12 @@ class AgentApp(App):
                 self._write_tool_line(f"  ({duration})")
         elif event == "tool_progress":
             self._write_tool_line(f"· {data.get('message', '')}")
+        elif event == "notification":
+            self._write_tool_line(f"ℹ {data.get('text', '')}")
+        elif event == "extension_status":
+            self._write_tool_line(
+                f"· {data.get('key')}: {data.get('text', '')}"
+            )
         elif event == "run_final":
             if not data.get("streamed"):
                 self._close_agent_block()
@@ -330,6 +336,9 @@ class AgentApp(App):
         max_turns = budget.get("max_turns", 0)
         calls = budget.get("llm_calls", 0)
         max_calls = budget.get("max_llm_calls", 0)
+        ctx = budget.get("context_tokens", 0)
+        max_ctx = budget.get("max_context_tokens", 0)
+        ext = budget.get("ext", 0)
         ratio = 0.0
         if max_turns:
             ratio = max(ratio, turns / max_turns)
@@ -341,8 +350,19 @@ class AgentApp(App):
         spinner = "⠿" if self.controller.running else "·"
         perfil = self.controller.config.active_profile
         perfil_txt = f" · perfil {perfil}" if perfil else ""
-        status = (
-            f" turnos {turns}/{max_turns} · chamadas {calls}/{max_calls} · "
-            f"{_bar(ratio)} {ratio * 100:.0f}% · {spinner} {estado}{perfil_txt}"
-        )
+        ctx_txt = f"ctx {ctx // 1000}k/{max_ctx // 1000}k" if max_ctx else ""
+        ext_txt = f"ext {ext} ferramentas" if ext else ""
+        partes = [
+            f"turnos {turns}/{max_turns}",
+            f"chamadas {calls}/{max_calls}",
+        ]
+        if ctx_txt:
+            partes.append(ctx_txt)
+        if ext_txt:
+            partes.append(ext_txt)
+        partes.append(f"{_bar(ratio)} {ratio * 100:.0f}%")
+        partes.append(f"{spinner} {estado}")
+        if perfil_txt:
+            partes.append(perfil_txt)
+        status = " · ".join(partes)
         self.query_one("#status", Static).update(status)

@@ -147,4 +147,10 @@ def build_agent(
         "new", _nova_sessao, extension="builtin", source="builtin"
     )
 
+    # pi.emit em linha: eventos custom de extensão (notification,
+    # extension_status, tool_progress, ...) chegam à mesma on_event do
+    # loop, que os espelha à CLI/TUI e ao transcript (seção 7.1 do PRD).
+    registry.bind_runtime(session)
+    registry.set_event_sink(loop.on_event)
+
     return loop
