@@ -49,6 +49,24 @@ e este projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 - `pyproject.toml` → 0.2.0a1; `CHANGELOG.md`.
 - `formiga research` confirmado intacto (smoke real com NIM executado).
 
+**Fase 6 — Gateway local + retomada (PRD §11)**
+- `gateway.py`: daemon WebSocket apenas em loopback que possui o `AgentLoop`
+  e as sessões; pidfile com pid/porta/versão (`~/.formiga/gateway-<hash>.json`);
+  um gateway por workdir; idle-shutdown de 10 min sem sessão ativa.
+- `client.py`: `GatewayClient` (handshake WS, create/attach/submit/cancel/
+  detach/list_sessions) e `ensure_gateway()` (não sobe subprocesso por padrão;
+  `formiga gateway start` sobe manualmente).
+- CLI: `formiga gateway start|stop|status`; modo padrão anexa ao gateway
+  (input via `run_in_executor`); `--local` e `--print` continuam in-process.
+- Retomada: `formiga agent --continue` (última sessão) e `--resume <id>`
+  carregam `messages.json` e continuam o loop; `list_sessions` ordena por mtime.
+- Desconectar ≠ cancelar: fechar o terminal no meio do turno não interrompe;
+  reanexar mostra a resposta; fila crash-durable sobrevive a restart.
+- Broadcast de eventos (`stream`, `tool_start`, `budget`, `notification`, …)
+  para múltiplos clientes anexados à mesma sessão.
+- `turn_done` garantido mesmo quando o loop de um turno falha.
+- 378 testes verdes (incluindo 11 de aceitação do gateway) + `ruff check` limpo.
+
 ### [0.1.0] — v1 inicial
 
 - `formiga research`: pesquisa profunda controlada pelo programa com

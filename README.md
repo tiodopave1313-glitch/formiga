@@ -69,6 +69,36 @@ formiga agent "qualquer pergunta sobre o projeto"
 Configuração via CLI, variáveis de ambiente (`FORMIGA_*`) ou `./formiga.toml`
 (precedência: CLI > env > arquivo > defaults). Veja `formiga.toml.example`.
 
+### `formiga gateway` — daemon local (Fase 6)
+
+O gateway é um processo WebSocket apenas em loopback que **possui o `AgentLoop`
+e as sessões**, sobrevivendo ao terminal. A CLI e a TUI se tornam clientes que
+se anexam a ele.
+
+```bash
+# Suba o daemon (background, persiste entre terminais)
+formiga gateway start
+
+# Verifique o estado (pid, porta, versão)
+formiga gateway status
+
+# Rode o agent: anexa ao gateway automaticamente (sobe on-demand se necessário)
+formiga agent "qualquer pergunta sobre o projeto"
+
+# Feche o terminal no meio de um turno: não cancela. Reabra e reanexe para ver
+# a resposta. Pare o daemon quando terminar:
+formiga gateway stop
+```
+
+- **Desconectar ≠ cancelar**: fechar o terminal no meio do turno não interrompe
+  o agente; o turno termina no gateway e pode ser reanexado.
+- **Fila crash-durable**: prompts enviados são gravados em disco antes de
+  executar; sobrevivem a uma queda do gateway.
+- **`--print` e `--local`**: continuam in-process (sem depender do daemon),
+  ideais para scripts e testes.
+- Um gateway por diretório de trabalho; sem autenticação nem TLS no MVP
+  (single-user, loopback).
+
 ## Opções de `research`
 
 | Opção | Finalidade |

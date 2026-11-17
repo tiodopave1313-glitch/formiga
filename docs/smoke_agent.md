@@ -136,6 +136,37 @@ Verificar (80×24):
 - [ ] O estado final nunca é "sucesso" após interrupção.
 - [ ] Comandos `/tools`, `/ext`, `/budget`, `/new` funcionam.
 
+## 7. Gateway local (`formiga gateway`)
+
+O gateway é um daemon WebSocket local que possui o `AgentLoop` e as sessões,
+sobrevivendo ao terminal. A CLI/TUI se anexam a ele.
+
+```bash
+# 1. Suba o gateway (background, persiste)
+formiga gateway start
+
+# 2. Verifique o status
+formiga gateway status
+
+# 3. Rode o agent (anexa ao gateway automaticamente)
+formiga agent "qual é a capital do Brasil?"
+
+# 4. Feche o terminal (Ctrl+C ou feche janela) — o turno continua no gateway.
+#    Reabra e reanexe:
+formiga agent "e qual é a população dela?"  # retoma a mesma sessão
+
+# 5. Pare o gateway
+formiga gateway stop
+```
+
+Verificar:
+
+- [ ] `formiga gateway start` inicia o daemon; `status` mostra pid/porta.
+- [ ] `formiga agent` anexa ao gateway e responde (streaming, ferramentas).
+- [ ] Fechar o terminal no meio do turno **não cancela**; reanexar mostra a resposta.
+- [ ] `--print` e `--local` rodam **sem** precisar do gateway.
+- [ ] Nenhuma credencial aparece em logs ou sessões.
+
 ## Aceite (marcar ao terminar)
 
 - [ ] `formiga agent --print` responde com o modelo real (NIM ou local).
@@ -145,6 +176,8 @@ Verificar (80×24):
 - [ ] `/new sim` cria sessão preservando a anterior.
 - [ ] `NO_COLOR=1` sem sequências ANSI; 80×24 respeitado.
 - [ ] `Ctrl+C`/`Esc` cooperativo; estado final correto.
+- [ ] Gateway: `start`/`status`/`stop` funcionam; reanexo mostra resposta.
+- [ ] `--print` e `--local` rodam sem gateway.
 - [ ] Nenhuma credencial em `messages.json`, `events.jsonl`, `transcript.md`
       nem stdout.
 
