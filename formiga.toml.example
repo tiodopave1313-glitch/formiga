@@ -42,6 +42,10 @@ max_pages = 18
 max_llm_calls = 40
 timeout_seconds = 900
 
+[extensions]
+# Builtins do MVP; ordem de carregamento é fixa: core, web, deepsearch.
+enabled = ["core", "web", "deepsearch"]
+
 [agent]
 # Harness agêntico (docs/prd_agent.md).
 max_turns = 24

@@ -7,15 +7,12 @@ schemas, limites e persistência.
 from __future__ import annotations
 
 from collections.abc import Callable
-from pathlib import Path
+from importlib import import_module
 
 from formiga.agent.chat import build_chat_client
+from formiga.agent.extensions.registry import ExtensionContext, ExtensionRegistry
 from formiga.agent.loop import AgentLoop
 from formiga.agent.session import Session
-from formiga.agent.tools import FILE_TOOLS
-from formiga.agent.tools.deepsearch import DeepSearchTool
-from formiga.agent.tools.shell import BashTool
-from formiga.agent.tools.web import WebFetchTool, WebSearchTool
 from formiga.config import Config
 
 
@@ -24,14 +21,27 @@ def build_agent(
     session: Session,
     on_event: Callable[[str, dict], None] | None = None,
 ) -> AgentLoop:
-    """Monta o `AgentLoop` com as oito ferramentas e o chat client do config."""
+    """Monta o agente por extensões builtin e entrega tools pelo registry."""
     chat_client = build_chat_client(config)
-    workdir = Path(config.agent_workdir)
-    tools = [
-        BashTool(workdir),
-        WebSearchTool(config),
-        WebFetchTool(config),
-        DeepSearchTool(config, session.research_dir),
-        *(tool_cls(workdir) for tool_cls in FILE_TOOLS),
-    ]
-    return AgentLoop(chat_client, tools, session, config, on_event=on_event)
+    registry = ExtensionRegistry()
+    extension_api = ExtensionContext(registry, config, session)
+
+    # A ordem é explícita e determinística. A descoberta externa é fase 2.
+    available = ("core", "web", "deepsearch")
+    enabled = tuple(getattr(config, "extensions_enabled", available))
+    unknown = set(enabled) - set(available)
+    if unknown:
+        raise ValueError(f"extensões builtin desconhecidas: {sorted(unknown)}")
+    for name in available:
+        if name in enabled:
+            extension = import_module(f"formiga.ext.{name}")
+            extension.setup(extension_api)
+
+    return AgentLoop(
+        chat_client,
+        list(registry.tools.values()),
+        session,
+        config,
+        on_event=on_event,
+        registry=registry,
+    )

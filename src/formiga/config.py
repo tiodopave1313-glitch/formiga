@@ -50,6 +50,8 @@ ENV_AGENT_MAX_WEB_SEARCHES = "FORMIGA_AGENT_MAX_WEB_SEARCHES"
 ENV_AGENT_MAX_WEB_FETCHES = "FORMIGA_AGENT_MAX_WEB_FETCHES"
 ENV_AGENT_TOOL_RESULT_CHARS = "FORMIGA_AGENT_TOOL_RESULT_CHARS"
 ENV_AGENT_WORKDIR = "FORMIGA_AGENT_WORKDIR"
+ENV_EXTENSIONS_ENABLED = "FORMIGA_EXTENSIONS_ENABLED"
+DEFAULT_ENABLED_EXTENSIONS = ("core", "web", "deepsearch")
 
 ENV_OPENAI_URL = "FORMIGA_OPENAI_URL"
 ENV_OPENAI_API_KEY_ENV = "FORMIGA_OPENAI_API_KEY_ENV"
@@ -157,6 +159,7 @@ class Config:
     agent_max_web_fetches: int = 8
     agent_tool_result_chars: int = 4000
     agent_workdir: str = "."
+    extensions_enabled: tuple[str, ...] = DEFAULT_ENABLED_EXTENSIONS
 
     @classmethod
     def from_sources(
@@ -232,6 +235,11 @@ class Config:
             config = replace(config, agent_tool_result_chars=int(v))
         if (v := _env(env, ENV_AGENT_WORKDIR)) is not None:
             config = replace(config, agent_workdir=v)
+        if (v := _env(env, ENV_EXTENSIONS_ENABLED)) is not None:
+            config = replace(
+                config,
+                extensions_enabled=tuple(name.strip() for name in v.split(",") if name.strip()),
+            )
         config.validate()
         return config
 
@@ -293,6 +301,7 @@ class Config:
             "agent_max_web_fetches",
             "agent_tool_result_chars",
             "agent_workdir",
+            "extensions_enabled",
         ):
             value = getattr(args, key, None)
             if value is not None and value != getattr(self, key):
@@ -361,6 +370,13 @@ class Config:
         ):
             if not (url.startswith("http://") or url.startswith("https://")):
                 raise ConfigError(f"{name} deve ser uma URL http(s): {url!r}.")
+        if not isinstance(self.extensions_enabled, (tuple, list)) or any(
+            not isinstance(name, str) or not name.strip()
+            for name in self.extensions_enabled
+        ):
+            raise ConfigError("extensions_enabled deve ser uma lista de nomes não vazios.")
+        if len(set(self.extensions_enabled)) != len(self.extensions_enabled):
+            raise ConfigError("extensions_enabled não pode conter nomes duplicados.")
         if self.llm_backend not in LLM_BACKENDS:
             raise ConfigError(
                 f"llm_backend inválido: {self.llm_backend!r} (use um de {LLM_BACKENDS})."

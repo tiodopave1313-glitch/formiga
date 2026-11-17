@@ -22,6 +22,7 @@ from collections.abc import Callable
 from time import monotonic
 
 from formiga.agent.chat import AgentCancelled, ChatResponse
+from formiga.agent.extensions.registry import ExtensionRegistry
 from formiga.agent.guardrails import (
     AgentBudget,
     AntiLoop,
@@ -34,9 +35,6 @@ from formiga.agent.session import Session
 from formiga.agent.tools.base import Tool
 from formiga.config import Config
 from formiga.llm import LLMError
-
-# Tools com orçamento próprio por mensagem do usuário.
-BUDGETED_TOOLS = ("deep_search", "web_search", "web_fetch")
 
 
 def short_args(args: dict, limit: int = 60) -> str:
@@ -59,9 +57,17 @@ class AgentLoop:
         session: Session,
         config: Config,
         on_event: Callable[[str, dict], None] | None = None,
+        registry: ExtensionRegistry | None = None,
     ) -> None:
         self.chat = chat_client
-        self.tools = {t.name: t for t in tools}
+        self.registry = registry or ExtensionRegistry()
+        if registry is None:
+            for tool in tools:
+                budget = getattr(tool, "budget_per_message", None)
+                if config_attr := getattr(tool, "budget_config_attr", None):
+                    budget = int(getattr(config, config_attr))
+                self.registry.register_tool(tool, budget_per_message=budget)
+        self.tools = self.registry.tools
         self.session = session
         self.config = config
         self.on_event = on_event or (lambda *a, **k: None)
@@ -83,6 +89,12 @@ class AgentLoop:
             max_web_searches=int(getattr(agent_cfg, "agent_max_web_searches", 6)),
             max_web_fetches=int(getattr(agent_cfg, "agent_max_web_fetches", 8)),
         )
+        self.registry_budget_limits = {
+            name: registration.budget_per_message
+            for name, registration in self.registry.registrations.items()
+            if registration.budget_per_message is not None
+        }
+        self.tool_budgets.limits = dict(self.registry_budget_limits)
 
         self.messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
 
@@ -183,6 +195,7 @@ class AgentLoop:
             max_deep_searches=self.tool_budgets.max_deep_searches,
             max_web_searches=self.tool_budgets.max_web_searches,
             max_web_fetches=self.tool_budgets.max_web_fetches,
+            limits=dict(self.registry_budget_limits),
         )
         self.anti_loop = AntiLoop()
         self._pending_len = None  # nenhum turno de tool pendente
@@ -208,7 +221,7 @@ class AgentLoop:
             try:
                 response: ChatResponse = self.chat.chat(
                     self.messages,
-                    tools=[t.schema() for t in self.tools.values()],
+                    tools=self.registry.schemas,
                     max_tokens=self._max_tokens(),
                     on_delta=self._on_delta,
                 )
@@ -319,11 +332,12 @@ class AgentLoop:
                 + "\nResultado não útil; tente outro caminho ou responda."
             )
 
-        # orçamento da tool (web/deep_search); outras tools não têm orçamento
-        # próprio por mensagem.
+        # Orçamento por mensagem declarado pela extensão no registry; nenhuma
+        # lista de ferramentas especiais fica hardwired no loop.
         budget_err = None
-        if name in BUDGETED_TOOLS:
-            budget_err = self.tool_budgets.consume(name)
+        budget_limit = self.registry.budget_for(name)
+        if budget_limit is not None:
+            budget_err = self.tool_budgets.consume(name, budget_limit)
         if budget_err is not None:
             self.session.append_event(
                 "tool_call",
@@ -340,7 +354,7 @@ class AgentLoop:
         if self._cancel.is_set():
             return "ERRO: interrompido pelo usuário."
 
-        # eventos do motor reexpostos pela tool (deep_search)
+        # Evento de progresso opcional fornecido por uma ferramenta/extensão.
         if hasattr(tool, "on_event"):
             tool.on_event = self._emit
 

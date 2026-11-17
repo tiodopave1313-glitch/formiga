@@ -77,7 +77,14 @@ _AGENT_KEYS = {
     "tool_result_chars": "agent_tool_result_chars",
     "workdir": "agent_workdir",
 }
-_SECTIONS = {"llm": _LLM_KEYS, "search": _SEARCH_KEYS, "budget": _BUDGET_KEYS, "agent": _AGENT_KEYS}
+_EXTENSIONS_KEYS = {"enabled": "extensions_enabled"}
+_SECTIONS = {
+    "llm": _LLM_KEYS,
+    "search": _SEARCH_KEYS,
+    "budget": _BUDGET_KEYS,
+    "agent": _AGENT_KEYS,
+    "extensions": _EXTENSIONS_KEYS,
+}
 
 _FLOAT_FIELDS = {"llm_temperature", "llm_timeout", "timeout_seconds", "agent_timeout_seconds"}
 _INT_FIELDS = {
@@ -165,7 +172,9 @@ def load_file_values(
 
 
 def _check_type(name: str, value: object, path: Path) -> None:
-    if name in _FLOAT_FIELDS:
+    if name == "extensions_enabled":
+        ok = isinstance(value, list) and all(isinstance(item, str) for item in value)
+    elif name in _FLOAT_FIELDS:
         ok = isinstance(value, (int, float)) and not isinstance(value, bool)
     elif name in _INT_FIELDS:
         ok = isinstance(value, int) and not isinstance(value, bool)

@@ -107,13 +107,33 @@ class ToolBudgets:
     max_deep_searches: int = 2
     max_web_searches: int = 6
     max_web_fetches: int = 8
+    limits: dict[str, int] = field(default_factory=dict)
+    used: dict[str, int] = field(default_factory=dict)
 
     deep_searches_used: int = 0
     web_searches_used: int = 0
     web_fetches_used: int = 0
 
-    def consume(self, resource: str) -> str | None:
+    def consume(self, resource: str, limit: int | None = None) -> str | None:
         """Consome uma unidade do orçamento. Retorna `ERRO:` se esgotado."""
+        if resource in self.limits or limit is not None:
+            maximum = self.limits.get(resource, limit)
+            assert maximum is not None
+            used = self.used.get(resource, 0)
+            if used >= maximum:
+                return (
+                    f"ERRO: orçamento de {resource} esgotado "
+                    f"({maximum} por mensagem)."
+                )
+            self.used[resource] = used + 1
+            # Espelha os nomes históricos usados por integrações e testes.
+            if resource == "deep_search":
+                self.deep_searches_used = self.used[resource]
+            elif resource == "web_search":
+                self.web_searches_used = self.used[resource]
+            elif resource == "web_fetch":
+                self.web_fetches_used = self.used[resource]
+            return None
         if resource == "deep_search":
             if self.deep_searches_used >= self.max_deep_searches:
                 return (
@@ -140,6 +160,8 @@ class ToolBudgets:
         return None
 
     def remaining(self, resource: str) -> int:
+        if resource in self.limits:
+            return max(0, self.limits[resource] - self.used.get(resource, 0))
         if resource == "deep_search":
             return max(0, self.max_deep_searches - self.deep_searches_used)
         if resource == "web_search":

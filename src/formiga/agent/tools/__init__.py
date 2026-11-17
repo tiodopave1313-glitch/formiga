@@ -1,33 +1,9 @@
-"""Ferramentas do agente."""
+"""Contratos e compatibilidade dos imports antigos de ferramentas.
 
-from formiga.agent.tools.deepsearch import DeepSearchTool
-from formiga.agent.tools.files import EditTool, LsTool, ReadTool, WriteTool
-from formiga.agent.tools.shell import BashTool
-from formiga.agent.tools.web import WebFetchTool, WebSearchTool
+Ferramentas concretas vivem em `formiga.ext.*`; manter este pacote sem imports
+concretos garante que o núcleo possa importar o protocolo sem carregar builtins.
+"""
 
-ALL_TOOLS = (
-    LsTool,
-    ReadTool,
-    WriteTool,
-    EditTool,
-    BashTool,
-    WebSearchTool,
-    WebFetchTool,
-    DeepSearchTool,
-)
-FILE_TOOLS = (LsTool, ReadTool, WriteTool, EditTool)
-WEB_TOOLS = (WebSearchTool, WebFetchTool)
+from formiga.agent.tools.base import Tool, ToolResult
 
-__all__ = [
-    "BashTool",
-    "DeepSearchTool",
-    "EditTool",
-    "LsTool",
-    "ReadTool",
-    "WebFetchTool",
-    "WebSearchTool",
-    "WriteTool",
-    "ALL_TOOLS",
-    "FILE_TOOLS",
-    "WEB_TOOLS",
-]
+__all__ = ["Tool", "ToolResult"]
