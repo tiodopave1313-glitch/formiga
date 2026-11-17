@@ -99,6 +99,38 @@ formiga gateway stop
 - Um gateway por diretório de trabalho; sem autenticação nem TLS no MVP
   (single-user, loopback).
 
+### `formiga cron` — tarefas agendadas (Fase 7)
+
+O cron agenda tarefas do agente (prompt + orçamento + sessão própria), executadas
+pelo gateway. Não é cron de shell: cada job roda como uma sessão de agente
+isolada, com resultado persistido em disco.
+
+```bash
+# Adicione um job (cron 5 campos, intervalo ou one-shot)
+formiga cron add "resuma as notícias do dia" --schedule "0 8 * * 1-5"
+
+# Liste os jobs
+formiga cron list
+
+# Execute um job agora (in-process, offline)
+formiga cron run <id>
+
+# Habilite/desabilite ou remova
+formiga cron enable <id>
+formiga cron disable <id>
+formiga cron rm <id>
+```
+
+- **Schedules**: `0 7 * * 1-5` (cron 5 campos), `every 30m` (intervalo),
+  `at 2026-12-01T09:00` (one-shot).
+- **Catchup**: com o gateway parado na hora marcada, o disparo é skipado
+  (default) ou executado uma vez ao voltar (`--catchup once`).
+- **Orçamento por job**: `--max-turns`, `--max-llm-calls`, `--timeout-seconds`.
+- Cada run grava em `sessoes/cron/<job>/<timestamp>/` (mesmos artefatos de
+  sempre); eventos `job_start`/`job_end` são broadcast aos clientes anexados.
+- Config: `[cron] catchup = "skip"`, `tz = "America/Sao_Paulo"`;
+  env `FORMIGA_CRON_CATCHUP` / `FORMIGA_CRON_TZ`.
+
 ## Opções de `research`
 
 | Opção | Finalidade |

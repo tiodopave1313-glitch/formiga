@@ -14,6 +14,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from formiga.agent.chat import build_chat_client
+from formiga.agent.cron import JobStore
 from formiga.agent.extensions.budget import check_schema_budget, schema_tokens
 from formiga.agent.extensions.discovery import discover_extensions
 from formiga.agent.extensions.registry import ExtensionRegistry
@@ -145,6 +146,28 @@ def build_agent(
     )
     registry.register_command(
         "new", _nova_sessao, extension="builtin", source="builtin"
+    )
+
+    def _listar_cron(_argumentos: str = "") -> str:
+        """Lista as tarefas agendadas (cron) em ~/.formiga/jobs.json."""
+        store = JobStore()
+        jobs = store.load()
+        if not jobs:
+            return "Nenhuma tarefa agendada."
+        linhas = ["Tarefas agendadas (cron):"]
+        for jid in sorted(jobs):
+            job = jobs[jid]
+            status = f"{job.last_status or '—'}"
+            if job.last_error:
+                status += f" ({job.last_error[:60]})"
+            linhas.append(
+                f"  {jid:8} | {'ativado' if job.enabled else 'desabilitado':9} | "
+                f"{job.schedule:24} | próximo: {job.next_run or '—'} | {status}"
+            )
+        return "\n".join(linhas)
+
+    registry.register_command(
+        "cron", _listar_cron, extension="builtin", source="builtin"
     )
 
     # pi.emit em linha: eventos custom de extensão (notification,

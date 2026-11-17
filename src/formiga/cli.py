@@ -8,6 +8,13 @@ import sys
 from pathlib import Path
 
 from formiga import __version__
+from formiga.agent.cron import (
+    JobStore,
+    _iso,
+    _parse_iso,
+    criar_job,
+    utc_now,
+)
 from formiga.agent.factory import build_agent
 from formiga.agent.session import Session
 from formiga.config import Config, ConfigError
@@ -232,6 +239,46 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["start", "stop", "status"],
         help="start: inicia o daemon | stop: para | status: mostra o estado.",
     )
+
+    cron = sub.add_parser(
+        "cron", help="Gerencia tarefas agendadas (Fase 7)."
+    )
+    cron_sub = cron.add_subparsers(dest="cron_acao", required=True)
+
+    cron_add = cron_sub.add_parser(
+        "add", help="Adiciona uma tarefa agendada."
+    )
+    cron_add.add_argument("prompt", help="Prompt do job (entre aspas).")
+    cron_add.add_argument(
+        "--schedule", required=True, help="Expressão cron (5 campos), 'every N[mhd]' ou 'at <ISO>'."
+    )
+    cron_add.add_argument(
+        "--at", dest="at_override", help="Sobrescreve o primeiro disparo (ISO-8601)."
+    )
+    cron_add.add_argument("--max-turns", type=int, help="Limite de turnos do job.")
+    cron_add.add_argument("--max-llm-calls", type=int, help="Limite de chamadas LLM do job.")
+    cron_add.add_argument("--timeout-seconds", type=float, help="Tempo máximo do job.")
+    cron_add.add_argument(
+        "--catchup", choices=["skip", "once"], default="skip",
+        help="O que fazer se o gateway estiver parado na hora marcada.",
+    )
+    cron_add.add_argument("--model", help="Modelo do job.")
+    cron_add.add_argument("--profile", help="Perfil do job.")
+
+    cron_sub.add_parser("list", help="Lista tarefas agendadas.")
+
+    cron_rm = cron_sub.add_parser("rm", help="Remove uma tarefa agendada.")
+    cron_rm.add_argument("id", help="ID do job.")
+
+    cron_enable = cron_sub.add_parser("enable", help="Habilita uma tarefa.")
+    cron_enable.add_argument("id", help="ID do job.")
+
+    cron_disable = cron_sub.add_parser("disable", help="Desabilita uma tarefa.")
+    cron_disable.add_argument("id", help="ID do job.")
+
+    cron_run = cron_sub.add_parser("run", help="Executa uma tarefa agora (in-process).")
+    cron_run.add_argument("id", help="ID do job.")
+
     return parser
 
 
@@ -311,6 +358,10 @@ def main(argv: list[str] | None = None) -> int:
             return gateway_stop(Path.cwd())
         if args.acao == "status":
             return gateway_status(Path.cwd())
+
+    if args.command == "cron":
+
+        return _cron_dispatch(args)
 
     if args.command == "research":
         if not args.question.strip():
@@ -615,9 +666,13 @@ def _run_interactive(config: Config, session: Session, args) -> int:
                     continue
                 partes = corpo.split(None, 1)
                 nome = partes[0]
-                print(
-                    f"Comando /{nome} via gateway será tratado em breve no cliente."
-                )
+                argumentos = partes[1] if len(partes) > 1 else ""
+                try:
+                    resultado = await client.command(nome, argumentos)
+                except (ConnectionError, RuntimeError, TimeoutError) as exc:
+                    print(f"Erro ao executar /{nome} via gateway: {exc}")
+                    continue
+                print(resultado)
                 continue
 
             client.on_event = _exibe_evento
@@ -774,6 +829,164 @@ def _run_resume(config: Config, session: Session, args) -> int:
             continue
         except KeyboardInterrupt:
             continue  # loop trata internamente; volta ao prompt
+
+
+# ---------------------------------------------------------------------- #
+# CLI: formiga cron (Fase 7)
+# ---------------------------------------------------------------------- #
+
+
+def _cron_dispatch(args) -> int:
+    store = JobStore()
+    jobs = store.load()
+
+    if args.cron_acao == "add":
+        return _cron_add(store, jobs, args)
+    if args.cron_acao == "list":
+        return _cron_list(jobs)
+    if args.cron_acao == "rm":
+        return _cron_rm(store, jobs, args.id)
+    if args.cron_acao == "enable":
+        return _cron_toggle(store, jobs, args.id, True)
+    if args.cron_acao == "disable":
+        return _cron_toggle(store, jobs, args.id, False)
+    if args.cron_acao == "run":
+        return _cron_run(jobs, args.id)
+    return EXIT_INVALID_INPUT
+
+
+def _cron_add(store, jobs, args) -> int:
+    """Adiciona um job a jobs.json e calcula o primeiro next_run."""
+    agora = utc_now()
+    primeiro = None
+    if args.at_override:
+        try:
+            primeiro = _parse_iso(args.at_override)
+        except ValueError as exc:
+            print(f"Erro: --at inválido: {exc}", file=sys.stderr)
+            return EXIT_INVALID_INPUT
+
+    try:
+        job = criar_job(
+            prompt=args.prompt,
+            schedule=args.schedule,
+            id=None,
+            enabled=True,
+            model=args.model,
+            profile=args.profile,
+            max_turns=args.max_turns,
+            max_llm_calls=args.max_llm_calls,
+            timeout_seconds=args.timeout_seconds,
+            catchup=args.catchup,
+            tz=None,
+            output_dir=None,
+            now_fn=lambda: agora,
+        )
+    except ValueError as exc:
+        print(f"Erro: {exc}", file=sys.stderr)
+        return EXIT_INVALID_INPUT
+
+    if primeiro is not None:
+        job.next_run = _iso(primeiro)
+
+    jobs[job.id] = job
+    store.save(jobs)
+    print(f"Job criado: {job.id}")
+    print(f"  schedule: {job.schedule}")
+    print(f"  próximo:  {job.next_run}")
+    print(f"  catchup:  {job.catchup}")
+    return EXIT_OK
+
+
+def _cron_list(jobs) -> int:
+    """Lista os jobs agendados."""
+    if not jobs:
+        print("Nenhuma tarefa agendada.")
+        return EXIT_OK
+    print("Tarefas agendadas (cron):")
+    for jid in sorted(jobs):
+        job = jobs[jid]
+        status = f"{job.last_status or '—'}"
+        if job.last_error:
+            status += f" ({job.last_error})"
+        print(
+            f"  {jid:8} | {'ativado' if job.enabled else 'desabilitado':9} | "
+            f"{job.schedule:24} | próximo: {job.next_run or '—'} | {status}"
+        )
+    return EXIT_OK
+
+
+def _cron_rm(store, jobs, job_id: str) -> int:
+    if job_id not in jobs:
+        print(f"Job não encontrado: {job_id}", file=sys.stderr)
+        return EXIT_INVALID_INPUT
+    del jobs[job_id]
+    store.save(jobs)
+    print(f"Job removido: {job_id}")
+    return EXIT_OK
+
+
+def _cron_toggle(store, jobs, job_id: str, habilitar: bool) -> int:
+    if job_id not in jobs:
+        print(f"Job não encontrado: {job_id}", file=sys.stderr)
+        return EXIT_INVALID_INPUT
+    jobs[job_id].enabled = habilitar
+    store.save(jobs)
+    verbo = "Habilitado" if habilitar else "Desabilitado"
+    print(f"{verbo}: {job_id}")
+    return EXIT_OK
+
+
+def _cron_run(jobs, job_id: str) -> int:
+    """Executa um job agora, in-process (offline, sem depender do daemon)."""
+    if job_id not in jobs:
+        print(f"Job não encontrado: {job_id}", file=sys.stderr)
+        return EXIT_INVALID_INPUT
+    job = jobs[job_id]
+
+    agora = utc_now()
+    agora_iso = _iso(agora)
+    timestamp = agora.strftime("%Y-%m-%d_%H%M%S")
+    cron_base = Path("sessoes") / "cron" / job.id
+    session_id = f"cron_{timestamp}"
+
+    print(f"Executando job {job.id} (in-process)...")
+    print(f"  schedule: {job.schedule}")
+    print(f"  sessão:   {cron_base / session_id}")
+
+    kwargs: dict[str, object] = {"agent_workdir": str(Path.cwd())}
+    if job.model:
+        kwargs["model"] = job.model
+    if job.profile:
+        kwargs["active_profile"] = job.profile
+    if job.max_turns is not None:
+        kwargs["agent_max_turns"] = job.max_turns
+    if job.max_llm_calls is not None:
+        kwargs["agent_max_llm_calls"] = job.max_llm_calls
+    if job.timeout_seconds is not None:
+        kwargs["agent_timeout_seconds"] = job.timeout_seconds
+    config = Config(**kwargs)
+
+    contexto = (
+        f"[Contexto do job agendado]\n"
+        f"Job: {job.id}\n"
+        f"Disparado em: {agora_iso}\n"
+        f"Diretório: {Path.cwd()}\n"
+        f"\n{job.prompt}\n"
+    )
+
+    sess = Session(cron_base, session_id=session_id)
+    loop = build_agent(config, sess)
+    try:
+        loop.run(contexto)
+        print(f"\nJob {job.id} concluído com sucesso.")
+        return EXIT_OK
+    except Exception as exc:  # noqa: BLE001 — isola o job.
+        import traceback
+
+        traceback.print_exc()
+        print(f"\nJob {job.id} falhou: {exc}", file=sys.stderr)
+        return EXIT_OPERATIONAL_FAILURE
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -1,6 +1,6 @@
 [project]
 name = "formiga"
-version = "0.2.0a1"
+version = "0.3.0a1"
 description = "Harness minimalista de pesquisa profunda controlado por orçamentos e evidências."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -9,6 +9,7 @@ dependencies = [
     "httpx>=0.28",
     "trafilatura>=2.0",
     "pydantic>=2.7",
+    "croniter>=0.3",
 ]
 
 [project.optional-dependencies]

@@ -28,8 +28,17 @@ import os
 import signal
 import sys
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 
+from formiga.agent.cron import (
+    Job,
+    JobStore,
+    Schedule,
+    _iso,
+    _parse_iso,
+    utc_now,
+)
 from formiga.agent.factory import build_agent
 from formiga.agent.session import Session
 from formiga.config import Config, ConfigError
@@ -260,13 +269,18 @@ class GatewaySession:
 class Gateway:
     """Servidor WebSocket local: gerencia sessões e faz broadcast de eventos."""
 
-    def __init__(self, cwd: Path | str) -> None:
+    def __init__(self, cwd: Path | str, catchup: str = "skip") -> None:
         self.cwd = Path(cwd).resolve()
         self.server: asyncio.AbstractServer | None = None
         self.sessions: dict[str, GatewaySession] = {}
         self.clients: dict[str, set[asyncio.StreamWriter]] = {}  # session_id -> writers
         self._idle_task: asyncio.Task | None = None
         self._stop = asyncio.Event()
+        # -- cron (Fase 7) ------------------------------------------- #
+        self.job_store = JobStore()
+        self.jobs: dict[str, Job] = {}
+        self._scheduler_task: asyncio.Task | None = None
+        self._catchup = catchup
 
     # -- ciclo de vida ------------------------------------------------- #
 
@@ -278,11 +292,19 @@ class Gateway:
         actual_port = self.server.sockets[0].getsockname()[1]  # type: ignore[union-attr]
         _write_pidfile(self.cwd, actual_port, os.getpid())
         self._schedule_idle()
+        # -- cron: carrega jobs, processa perdidos, inicia scheduler -- #
+        self.jobs = self.job_store.load()
+        self._processar_jobs_perdidos()
+        self._iniciar_scheduler()
         return actual_port
 
     async def stop(self) -> None:
-        """Para o servidor e remove o pidfile."""
+        """Para o servidor, o scheduler de cron e remove o pidfile."""
         self._stop.set()
+        if self._scheduler_task:
+            self._scheduler_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._scheduler_task
         if self.server:
             self.server.close()
             await self.server.wait_closed()
@@ -475,6 +497,189 @@ class Gateway:
                 },
             )
 
+    # -- cron (Fase 7) ------------------------------------------------- #
+
+    def _iniciar_scheduler(self) -> None:
+        """Inicia a task asyncio que dispara jobs agendados."""
+        if self._scheduler_task:
+            self._scheduler_task.cancel()
+        self._scheduler_task = asyncio.create_task(self._scheduler_loop())
+
+    def _processar_jobs_perdidos(self, agora: datetime | None = None) -> None:
+        """No startup, jobs com next_run perdido → skip (default) ou catchup."""
+        if agora is None:
+            agora = utc_now()
+        catchup_global = self._config_catchup()
+        alterou = False
+        for job in self.jobs.values():
+            if not job.enabled or job.next_run is None:
+                continue
+            try:
+                nr = _parse_iso(job.next_run)
+            except ValueError:
+                continue
+            if nr > agora:
+                continue  # ainda no futuro
+            # Job perdeu o disparo enquanto o gateway estava parado.
+            if catchup_global == "once" and job.catchup == "once":
+                # Marca para disparar imediatamente no próximo ciclo do
+                # scheduler (não cria task aqui: pode não haver loop).
+                job.next_run = _iso(agora)
+                job.last_status = "catchup"
+                alterou = True
+            else:
+                job.last_status = "skip"
+                job.last_error = "disparo perdido enquanto o gateway estava parado"
+                alterou = True
+            # Avança o next_run para não reprocessar indefinidamente.
+            schedule_obj = Schedule(job.schedule)
+            prox = schedule_obj.next_run(agora)
+            job.next_run = _iso(prox) if prox is not None else None
+        if alterou:
+            self.job_store.save(self.jobs)
+
+    def _config_catchup(self) -> str:
+        """Catchup global do daemon (default 'skip')."""
+        return self._catchup
+
+    async def _scheduler_loop(self) -> None:
+        """Loop principal do scheduler: dorme até o próximo disparo e executa."""
+        while not self._stop.is_set():
+            agora = utc_now()
+            disparar_agora: list[Job] = []
+            proximo_tempo: datetime | None = None
+
+            for job in self.jobs.values():
+                if not job.enabled or job.next_run is None:
+                    continue
+                try:
+                    nr = _parse_iso(job.next_run)
+                except ValueError:
+                    continue
+                if nr <= agora:
+                    disparar_agora.append(job)
+                elif proximo_tempo is None or nr < proximo_tempo:
+                    proximo_tempo = nr
+
+            # Dispara jobs atrasados.
+            for job in disparar_agora:
+                asyncio.create_task(self._run_cron_job(job))
+
+            if proximo_tempo is not None:
+                espera = (proximo_tempo - agora).total_seconds()
+                if espera > 0:
+                    with contextlib.suppress(TimeoutError):
+                        await asyncio.wait_for(
+                            self._stop.wait(), timeout=espera
+                        )
+                    if self._stop.is_set():
+                        break
+                    continue
+
+            # Sem jobs agendados: reavalia periodicamente.
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(self._stop.wait(), timeout=30.0)
+            if self._stop.is_set():
+                break
+
+    async def _run_cron_job(self, job: Job) -> None:
+        """Executa um job agendado em uma sessão nova (sessoes/cron/<job>/<ts>/)."""
+        agora = utc_now()
+        agora_iso = _iso(agora)
+
+        # --- job_start (broadcast para todos os clientes) ---------------- #
+        self._broadcast_todos(
+            "job_start",
+            {
+                "job": job.id,
+                "schedule": job.schedule,
+                "iniciado_em": agora_iso,
+            },
+        )
+
+        # Atualiza next_run antes de executar (evita disparo duplicado se
+        # demorar).
+        schedule_obj = Schedule(job.schedule)
+        referencia = _parse_iso(job.next_run) if job.next_run else agora
+        prox = schedule_obj.next_run(referencia)
+        job.next_run = _iso(prox) if prox is not None else None
+        job.last_run = agora_iso
+        self.job_store.save(self.jobs)
+
+        # --- executa o loop do agente em sessão cron -------------------- #
+        timestamp = agora.strftime("%Y-%m-%d_%H%M%S")
+        cron_base = self.cwd / "sessoes" / "cron" / job.id
+        session_id = f"cron_{timestamp}"
+        status = "ok"
+        erro = None
+
+        try:
+            # Constrói Config com overrides do job.
+            kwargs: dict[str, object] = {"agent_workdir": str(self.cwd)}
+            if job.model:
+                kwargs["model"] = job.model
+            if job.profile:
+                kwargs["active_profile"] = job.profile
+            if job.max_turns is not None:
+                kwargs["agent_max_turns"] = job.max_turns
+            if job.max_llm_calls is not None:
+                kwargs["agent_max_llm_calls"] = job.max_llm_calls
+            if job.timeout_seconds is not None:
+                kwargs["agent_timeout_seconds"] = job.timeout_seconds
+            config = Config(**kwargs)
+
+            # Prompt com contexto do job.
+            contexto = (
+                f"[Contexto do job agendado]\n"
+                f"Job: {job.id}\n"
+                f"Disparado em: {agora_iso}\n"
+                f"Diretório: {self.cwd}\n"
+                f"\n{job.prompt}\n"
+            )
+
+            sess = GatewaySession(session_id, config, cron_base, self._make_on_event(session_id))
+            self.sessions[session_id] = sess
+            sess.loop.run(contexto)
+        except Exception as exc:  # noqa: BLE001 — isola o job, não derruba o daemon.
+            status = "error"
+            erro = str(exc)
+            import traceback
+
+            traceback.print_exc()
+        finally:
+            # Remove a sessão cron do dicionário ativo (mantém os dados em disco).
+            self.sessions.pop(session_id, None)
+
+        # --- job_end (broadcast) -------------------------------------- #
+        job.last_status = status
+        job.last_error = erro
+        self.job_store.save(self.jobs)
+
+        self._broadcast_todos(
+            "job_end",
+            {
+                "job": job.id,
+                "status": status,
+                "erro": erro,
+                "finalizado_em": _iso(utc_now()),
+            },
+        )
+
+    def _broadcast_todos(self, event: str, data: dict) -> None:
+        """Envia um evento para todos os clientes de todas as sessões."""
+        frame = {
+            "action": "event",
+            "session": None,
+            "event": event,
+            "data": data,
+        }
+        payload = _ws_frame(json.dumps(frame, ensure_ascii=False))
+        for writers in self.clients.values():
+            for writer in list(writers):
+                with contextlib.suppress(OSError):
+                    writer.write(payload)
+
+
     # -- eventos do loop ---------------------------------------------- #
 
     def _make_on_event(self, session_id: str) -> Callable[[str, dict], None]:
@@ -517,7 +722,6 @@ class Gateway:
 
     def _new_session_id(self) -> str:
         import uuid
-        from datetime import UTC, datetime
 
         ts = datetime.now(UTC).strftime("%Y-%m-%d_%H%M%S")
         return f"{ts}_{uuid.uuid4().hex[:4]}"
@@ -554,8 +758,9 @@ class Gateway:
             "llm_max_retries",
             "llm_temperature",
         ):
-            if msg.get(chave) is not None:
-                kwargs[chave] = msg[chave]
+            valor = msg.get(chave)
+            if valor is not None:
+                kwargs[chave] = valor
         # Perfil e extensões.
         if msg.get("profile"):
             kwargs["active_profile"] = msg["profile"]
