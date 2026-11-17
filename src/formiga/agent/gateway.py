@@ -758,8 +758,9 @@ class Gateway:
             "llm_max_retries",
             "llm_temperature",
         ):
-            if msg.get(chave) is not None:
-                kwargs[chave] = msg[chave]
+            valor = msg.get(chave)
+            if valor is not None:
+                kwargs[chave] = valor
         # Perfil e extensões.
         if msg.get("profile"):
             kwargs["active_profile"] = msg["profile"]

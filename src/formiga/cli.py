@@ -666,9 +666,13 @@ def _run_interactive(config: Config, session: Session, args) -> int:
                     continue
                 partes = corpo.split(None, 1)
                 nome = partes[0]
-                print(
-                    f"Comando /{nome} via gateway será tratado em breve no cliente."
-                )
+                argumentos = partes[1] if len(partes) > 1 else ""
+                try:
+                    resultado = await client.command(nome, argumentos)
+                except (ConnectionError, RuntimeError, TimeoutError) as exc:
+                    print(f"Erro ao executar /{nome} via gateway: {exc}")
+                    continue
+                print(resultado)
                 continue
 
             client.on_event = _exibe_evento

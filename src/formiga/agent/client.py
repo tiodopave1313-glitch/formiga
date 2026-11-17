@@ -201,7 +201,24 @@ class GatewayClient:
             self.on_event(msg.get("event", ""), msg.get("data", {}))
 
     async def create(self, session_id: str | None = None, **config_overrides) -> str:
-        """Cria uma sessão no gateway. Devolve o session_id."""
+        """Cria uma sessão no gateway. Devolve o session_id.
+
+        Tenta até 3 vezes: o primeiro quadro de resposta pode ser perdido se
+        o gateway ainda estiver processando o handshake do connect.
+        """
+        last_exc: Exception | None = None
+        for _tentativa in range(3):
+            try:
+                return await self._create_once(session_id, **config_overrides)
+            except TimeoutError as exc:
+                last_exc = exc
+                if _tentativa < 2:
+                    await asyncio.sleep(0.5)
+        raise last_exc or TimeoutError("gateway não confirmou a criação da sessão")
+
+    async def _create_once(
+        self, session_id: str | None = None, **config_overrides
+    ) -> str:
         await self._send(
             {
                 "action": "create",
@@ -210,13 +227,24 @@ class GatewayClient:
             }
         )
 
-        def é_attached(msg: dict) -> bool:
-            return msg.get("action") == "attached"
+        # Lê frames diretamente até receber o attached.
+        assert self._reader is not None
+        import time as _time
 
-        mensagens = await self._read_until(é_attached, timeout=10.0)
-        for msg in mensagens:
-            await self._dispatch_event(msg)
-        for msg in mensagens:
+        fim = _time.monotonic() + 30.0
+        while _time.monotonic() < fim:
+            try:
+                texto = await asyncio.wait_for(
+                    _ws_client_read_frame(self._reader), timeout=fim - _time.monotonic()
+                )
+            except TimeoutError:
+                break
+            if texto is None:
+                break
+            try:
+                msg = json.loads(texto)
+            except ValueError:
+                continue
             if msg.get("action") == "attached":
                 self._session_id = msg.get("session") or session_id
                 return self._session_id
@@ -229,7 +257,7 @@ class GatewayClient:
         def é_attached(msg: dict) -> bool:
             return msg.get("action") == "attached"
 
-        mensagens = await self._read_until(é_attached, timeout=10.0)
+        mensagens = await self._read_until(é_attached, timeout=30.0)
         for msg in mensagens:
             await self._dispatch_event(msg)
         self._session_id = session_id
