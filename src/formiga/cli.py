@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import sys
 from pathlib import Path
 
@@ -172,10 +173,29 @@ def build_parser() -> argparse.ArgumentParser:
         help="Abre a TUI Textual (requer extra: uv add --extra gui formiga).",
     )
     agent.add_argument(
+        "--local",
+        dest="local_mode",
+        action="store_true",
+        help="Execução in-process (modo v1), sem usar o daemon do gateway.",
+    )
+    agent.add_argument(
         "--session-dir",
         type=Path,
         default=None,
         help="Diretório de sessão (default: sessoes/<timestamp_id> sob ./sessoes).",
+    )
+    agente_retoma = agent.add_mutually_exclusive_group()
+    agente_retoma.add_argument(
+        "--continue",
+        dest="continue_mode",
+        action="store_true",
+        help="Retoma a última sessão do workdir (in-process).",
+    )
+    agente_retoma.add_argument(
+        "--resume",
+        dest="resume_id",
+        metavar="ID",
+        help="Retoma a sessão com o ID informado (in-process).",
     )
     agent.add_argument("--config", default=None, help="Arquivo de configuração TOML.")
     _add_llm_args(agent)
@@ -203,6 +223,15 @@ def build_parser() -> argparse.ArgumentParser:
         "untrust", help="Remove um projeto da allowlist global de extensões."
     )
     untrust.add_argument("caminho", help="Caminho do diretório do projeto.")
+
+    gateway = sub.add_parser(
+        "gateway", help="Gerencia o daemon local do Formiga (Fase 6)."
+    )
+    gateway.add_argument(
+        "acao",
+        choices=["start", "stop", "status"],
+        help="start: inicia o daemon | stop: para | status: mostra o estado.",
+    )
     return parser
 
 
@@ -273,6 +302,16 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "untrust":
         return _toggle_trust(args.caminho, add=False)
 
+    if args.command == "gateway":
+        from formiga.agent.gateway import gateway_start, gateway_status, gateway_stop
+
+        if args.acao == "start":
+            return gateway_start(Path.cwd())
+        if args.acao == "stop":
+            return gateway_stop(Path.cwd())
+        if args.acao == "status":
+            return gateway_status(Path.cwd())
+
     if args.command == "research":
         if not args.question.strip():
             print("Erro: a pergunta não pode ser vazia.", file=sys.stderr)
@@ -314,6 +353,9 @@ def main(argv: list[str] | None = None) -> int:
             return _run_print(config, session, args)
         if args.tui_mode:
             return _run_tui(config, session, args)
+
+        if args.continue_mode or args.resume_id:
+            return _run_resume(config, session, args)
 
         return _run_interactive(config, session, args)
 
@@ -358,25 +400,18 @@ def _run_tui(config: Config, session: Session, args) -> int:
 
 
 def _run_interactive(config: Config, session: Session, args) -> int:
-    """CLI interativa padrão: loop de perguntas com streaming e ferramentas."""
-    loop = build_agent(config, session)
+    """CLI interativa padrão.
 
+    Por padrão anexa ao gateway local (sobe on-demand). Com `--local` executa
+    in-process (modo v1), sem usar o daemon.
+    """
     transcript_path = session.transcript_path
     print(f"formiga agent · sessão: {session.dir}")
     print(f"transcript: {transcript_path} · Ctrl+C interrompe a resposta · Ctrl+D sai")
 
-    # Se args.question veio, roda uma vez antes de entrar no prompt
-    if args.question and args.question.strip():
-        try:
-            loop.run(args.question)
-        except LLMError as exc:
-            print(f"\n✗ erro: {exc}")
-        except KeyboardInterrupt:
-            pass  # parcial já gravada pelo loop
-
     budget_snapshot: dict = {}
 
-    def on_event(event: str, data: dict) -> None:
+    def _exibe_evento(event: str, data: dict) -> None:
         nonlocal budget_snapshot
         if event == "stream":
             sys.stdout.write(data.get("text", ""))
@@ -429,7 +464,279 @@ def _run_interactive(config: Config, session: Session, args) -> int:
             sys.stdout.write("\n")
             sys.stdout.flush()
 
-    loop.on_event = on_event
+    def _imprime_orcamento() -> None:
+        if budget_snapshot:
+            t = budget_snapshot.get("turns", 0)
+            mt = budget_snapshot.get("max_turns", 0)
+            lc = budget_snapshot.get("llm_calls", 0)
+            mlc = budget_snapshot.get("max_llm_calls", 0)
+            ctx = budget_snapshot.get("context_tokens", 0)
+            mctx = budget_snapshot.get("max_context_tokens", 0)
+            ext = budget_snapshot.get("ext", 0)
+            sys.stdout.write(
+                f"\nturnos {t}/{mt} · llm {lc}/{mlc} · "
+                f"ctx {ctx}/{mctx} · ext {ext} ferramentas\n"
+            )
+            sys.stdout.flush()
+
+    use_gateway = not args.local_mode
+    client = None
+    loop = None
+
+    if use_gateway:
+        from formiga.agent.client import ensure_gateway
+
+        if not ensure_gateway(Path.cwd()):
+            print(
+                "Aviso: não foi possível subir o gateway. "
+                "Caindo para execução in-process (--local).",
+                file=sys.stderr,
+            )
+            use_gateway = False
+
+    if not use_gateway:
+        loop = build_agent(config, session)
+        loop.on_event = _exibe_evento
+
+        # Se args.question veio, roda uma vez antes de entrar no prompt
+        if args.question and args.question.strip():
+            try:
+                loop.run(args.question)
+            except LLMError as exc:
+                print(f"\n✗ erro: {exc}")
+            except KeyboardInterrupt:
+                pass  # parcial já gravada pelo loop
+
+        while True:
+            try:
+                q = input("\npergunta> ")
+            except EOFError:
+                print(f"\nSaindo. Sessão salva em {transcript_path}")
+                return EXIT_OK
+            except KeyboardInterrupt:
+                print()
+                return EXIT_OK
+
+            if not q.strip():
+                continue
+
+            if q.startswith("/"):
+                corpo = q[1:].strip()
+                if not corpo:
+                    continue
+                partes = corpo.split(None, 1)
+                nome = partes[0]
+                argumentos = partes[1] if len(partes) > 1 else ""
+                try:
+                    resultado = loop.registry.dispatch_command(nome, argumentos)
+                except KeyError:
+                    print(f"Comando desconhecido: /{nome}")
+                    continue
+                print(resultado)
+                continue
+
+            try:
+                loop.run(q)
+                _imprime_orcamento()
+            except LLMError as exc:
+                print(f"\n✗ erro: {exc}")
+                continue
+            except KeyboardInterrupt:
+                continue  # loop trata internamente; volta ao prompt
+
+        return EXIT_OK
+
+    # ---------- modo gateway (assíncrono, tudo em um único loop) ----------
+    async def _main_gateway() -> None:
+        from formiga.agent.client import GatewayClient
+
+        nonlocal client
+        client = GatewayClient(Path.cwd())
+        try:
+            await client.connect()
+            await client.create(
+                session_id=session.session_id,
+                model=args.model,
+                ollama_url=args.ollama_url,
+                searxng_url=args.searxng_url,
+                llm_backend=args.llm_backend,
+                openai_url=args.openai_url,
+                openai_api_key_env=args.openai_api_key_env,
+                llm_thinking=args.llm_thinking,
+                llamacpp_thinking=args.llamacpp_thinking,
+                fallback_backend=args.fallback_backend,
+                fallback_after_failures=args.fallback_after_failures,
+                llm_max_retries=args.llm_max_retries,
+                llm_temperature=args.llm_temperature,
+                max_llm_calls=args.max_llm_calls,
+                timeout_seconds=args.timeout_seconds,
+            )
+        except (ConnectionError, TimeoutError, OSError) as exc:
+            print(
+                f"Aviso: não foi possível anexar ao gateway ({exc}). "
+                "Caindo para execução in-process (--local).",
+                file=sys.stderr,
+            )
+            return
+
+        # Se args.question veio, roda uma vez antes de entrar no prompt
+        if args.question and args.question.strip():
+            client.on_event = _exibe_evento
+            try:
+                await client.submit(args.question)
+            except LLMError as exc:
+                print(f"\n✗ erro: {exc}")
+            except KeyboardInterrupt:
+                pass
+            _imprime_orcamento()
+
+        loop_async = asyncio.get_event_loop()
+
+        while True:
+            try:
+                q = await loop_async.run_in_executor(
+                    None, input, "\npergunta> "
+                )
+            except EOFError:
+                await client.close()
+                print(f"\nSaindo. Sessão salva em {transcript_path}")
+                return
+            except KeyboardInterrupt:
+                print()
+                await client.close()
+                return
+
+            if not q.strip():
+                continue
+
+            if q.startswith("/"):
+                corpo = q[1:].strip()
+                if not corpo:
+                    continue
+                partes = corpo.split(None, 1)
+                nome = partes[0]
+                print(
+                    f"Comando /{nome} via gateway será tratado em breve no cliente."
+                )
+                continue
+
+            client.on_event = _exibe_evento
+            try:
+                await client.submit(q)
+            except LLMError as exc:
+                print(f"\n✗ erro: {exc}")
+                continue
+            except KeyboardInterrupt:
+                continue
+            _imprime_orcamento()
+
+    asyncio.run(_main_gateway())
+    return EXIT_OK
+
+    asyncio.run(_main_gateway())
+    return EXIT_OK
+
+
+def _run_resume(config: Config, session: Session, args) -> int:
+    """Retoma uma sessão existente (in-process).
+
+    Carrega `messages.json` da sessão e continua o loop interativo
+    a partir do histórico salvo.
+    """
+    base_dir = args.session_dir or Path("sessoes")
+
+    # Determina o session_id: --resume <id> ou a última sessão do workdir.
+    if args.resume_id:
+        session_id = args.resume_id
+    else:
+        sessoes = Session.list_sessions(base_dir)
+        if not sessoes:
+            print(f"Nenhuma sessão encontrada em {base_dir}.", file=sys.stderr)
+            return EXIT_INVALID_INPUT
+        session_id = sessoes[-1].session_id  # a mais recente (listadas ordenadas)
+
+    session = Session(base_dir, session_id=session_id)
+    transcript_path = session.transcript_path
+    print(f"formiga agent · retomando sessão: {session.dir}")
+    print(f"transcript: {transcript_path} · Ctrl+C interrompe a resposta · Ctrl+D sai")
+
+    loop = build_agent(config, session)
+
+    # Substitui as mensagens só-system pelas mensagens salvas da sessão.
+    mensagens_salvas = session.load_messages()
+    if mensagens_salvas:
+        loop.messages = mensagens_salvas
+    else:
+        print("Sessão vazia; iniciando do zero.", file=sys.stderr)
+
+    budget_snapshot: dict = {}
+
+    def _exibe_evento(event: str, data: dict) -> None:
+        nonlocal budget_snapshot
+        if event == "stream":
+            sys.stdout.write(data.get("text", ""))
+            sys.stdout.flush()
+        elif event == "tool_start":
+            sys.stdout.write(f"\n⚙ {data.get('tool')} — {data.get('args', '')}")
+            sys.stdout.flush()
+        elif event == "tool_end":
+            if data.get("budget_exhausted"):
+                sys.stdout.write(f"  (⚙ {data.get('tool')} — orçamento esgotado)")
+            elif not data.get("ok", True):
+                seconds = data.get("seconds")
+                dur = f" ({seconds:.1f} s)" if isinstance(seconds, (int, float)) else ""
+                sys.stdout.write(f"  ✗ erro{dur}")
+            else:
+                seconds = data.get("seconds")
+                if isinstance(seconds, (int, float)):
+                    sys.stdout.write(f"  ({seconds:.1f} s)")
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+        elif event == "tool_progress":
+            sys.stdout.write(f"· {data.get('message', '')}\n")
+            sys.stdout.flush()
+        elif event == "notification":
+            sys.stdout.write(f"ℹ {data.get('text', '')}\n")
+            sys.stdout.flush()
+        elif event == "extension_status":
+            sys.stdout.write(f"· {data.get('key')}: {data.get('text', '')}\n")
+            sys.stdout.flush()
+        elif event == "budget":
+            budget_snapshot = data
+        elif event == "run_final" and not data.get("streamed"):
+            if budget_snapshot:
+                t = budget_snapshot.get("turns", 0)
+                mt = budget_snapshot.get("max_turns", 0)
+                lc = budget_snapshot.get("llm_calls", 0)
+                mlc = budget_snapshot.get("max_llm_calls", 0)
+                ctx = budget_snapshot.get("context_tokens", 0)
+                mctx = budget_snapshot.get("max_context_tokens", 0)
+                ext = budget_snapshot.get("ext", 0)
+                sys.stdout.write(
+                    f"\nturnos {t}/{mt} · llm {lc}/{mlc} · "
+                    f"ctx {ctx}/{mctx} · ext {ext} ferramentas\n"
+                )
+                sys.stdout.flush()
+        elif event == "interrupted":
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+
+    def _imprime_orcamento() -> None:
+        if budget_snapshot:
+            t = budget_snapshot.get("turns", 0)
+            mt = budget_snapshot.get("max_turns", 0)
+            lc = budget_snapshot.get("llm_calls", 0)
+            mlc = budget_snapshot.get("max_llm_calls", 0)
+            ctx = budget_snapshot.get("context_tokens", 0)
+            mctx = budget_snapshot.get("max_context_tokens", 0)
+            ext = budget_snapshot.get("ext", 0)
+            sys.stdout.write(
+                f"\nturnos {t}/{mt} · llm {lc}/{mlc} · "
+                f"ctx {ctx}/{mctx} · ext {ext} ferramentas\n"
+            )
+            sys.stdout.flush()
+
+    loop.on_event = _exibe_evento
 
     while True:
         try:
@@ -461,20 +768,7 @@ def _run_interactive(config: Config, session: Session, args) -> int:
 
         try:
             loop.run(q)
-            # imprime linha de orçamento após cada turno completo
-            b = loop._budget_snapshot()
-            t = b.get("turns", 0)
-            mt = b.get("max_turns", 0)
-            lc = b.get("llm_calls", 0)
-            mlc = b.get("max_llm_calls", 0)
-            ctx = b.get("context_tokens", 0)
-            mctx = b.get("max_context_tokens", 0)
-            ext = b.get("ext", 0)
-            sys.stdout.write(
-                f"\nturnos {t}/{mt} · llm {lc}/{mlc} · "
-                f"ctx {ctx}/{mctx} · ext {ext} ferramentas\n"
-            )
-            sys.stdout.flush()
+            _imprime_orcamento()
         except LLMError as exc:
             print(f"\n✗ erro: {exc}")
             continue

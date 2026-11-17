@@ -90,7 +90,13 @@ class Session:
         sessions: list[Session] = []
         if not base_dir.is_dir():
             return sessions
-        for entry in sorted(base_dir.iterdir()):
-            if entry.is_dir() and _SESSION_RE.match(f"sessoes/{entry.name}"):
-                sessions.append(cls(base_dir, entry.name))
+        entradas = [
+            e
+            for e in base_dir.iterdir()
+            if e.is_dir() and _SESSION_RE.match(f"sessoes/{e.name}")
+        ]
+        # Mais recente primeiro (pelo mtime do diretório).
+        entradas.sort(key=lambda e: e.stat().st_mtime, reverse=True)
+        for entry in entradas:
+            sessions.append(cls(base_dir, entry.name))
         return sessions
