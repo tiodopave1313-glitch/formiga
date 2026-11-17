@@ -9,6 +9,7 @@ OBSERVATION_EVENTS = frozenset(
         "stream",
         "tool_start",
         "tool_end",
+        "tool_progress",
         "budget",
         "interrupted",
         "extension_loaded",

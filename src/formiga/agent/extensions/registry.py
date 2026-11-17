@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from formiga.agent.extensions.events import CHAIN_EVENTS, OBSERVATION_EVENTS
 from formiga.agent.guardrails import ToolBudgets
 from formiga.agent.tools.base import Tool
 
@@ -51,23 +52,15 @@ class ExtensionRecord:
 
 
 class ExtensionRegistry:
-    """Registro ordenado de ferramentas, comandos e hooks de extensão."""
+    """Registro ordenado de ferramentas, comandos e hooks de extensão.
 
-    CHAIN_EVENTS = frozenset(
-        {"input", "before_agent_start", "context", "tool_call", "tool_result", "turn_end"}
-    )
-    OBSERVATION_EVENTS = frozenset(
-        {
-            "llm_call",
-            "stream",
-            "tool_start",
-            "tool_end",
-            "budget",
-            "interrupted",
-            "extension_loaded",
-            "deep_search_progress",
-        }
-    )
+    `CHAIN_EVENTS` e `OBSERVATION_EVENTS` são definidos em
+    `formiga.agent.extensions.events` (fonte única) e reexpôs aqui como
+    atributos de classe para compatibilidade.
+    """
+
+    CHAIN_EVENTS = CHAIN_EVENTS
+    OBSERVATION_EVENTS = OBSERVATION_EVENTS
 
     def __init__(self) -> None:
         self._tools: dict[str, ToolRegistration] = {}
