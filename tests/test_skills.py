@@ -323,6 +323,36 @@ def test_nudge_task_end_so_com_tarefa_bem_sucedida(skills_env):
     assert any("skill_manage" in text for text in nudges)
 
 
+def test_loop_emite_task_end_e_dispara_nudge(skills_env):
+    from formiga.agent.chat import ChatResponse
+    from formiga.agent.loop import AgentLoop
+    from formiga.agent.tools.files import LsTool
+    from tests.fakes_agent import FakeChatClient, tool_call
+
+    home, project, registry, session = skills_env
+    _write_skill(home / ".formiga/skills/resumir/SKILL.md", "resumir")
+    registry.register_tool(LsTool(project))
+    notificacoes: list[tuple[str, dict]] = []
+    registry._event_sink = lambda event, data: notificacoes.append((event, data))
+    chat = FakeChatClient(
+        [
+            ChatResponse(tool_calls=[tool_call("ls", '{"path": "."}')]),
+            ChatResponse(content="Pronto."),
+        ]
+    )
+    loop = AgentLoop(
+        chat,
+        registry,
+        session,
+        Config(agent_workdir=project, extensions_enabled=("skills",)),
+    )
+
+    loop.run("liste e conclua")
+
+    task_end = [data for event, data in notificacoes if event == "notification"]
+    assert any("skill_manage" in data["text"] for data in task_end)
+
+
 def test_cli_skills_list(tmp_path, monkeypatch, capsys):
     from formiga.cli import main
 
