@@ -37,9 +37,11 @@ def build_agent(
         nome: Profile(**{**settings, "name": nome})
         for nome, settings in config.profiles.items()
     }
+    # Força de perfil: `model_hint` (env/TOML) vence `active` (TOML/cron
+    # `--profile`); sem nenhum dos dois, a seleção é por substring do modelo.
     perfil = select_profile(
         config.model,
-        model_hint=config.profile_model_hint,
+        model_hint=config.profile_model_hint or config.active_profile,
         user_profiles=user_profiles,
     )
     if perfil is not None:

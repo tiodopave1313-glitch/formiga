@@ -8,21 +8,25 @@
 
 [llm]
 # Backend do modelo: "ollama" | "llamacpp" | "openai" (remoto OpenAI-compatível).
-backend = "openai"
-# "model" é o ID do modelo no backend remoto (ou nome no Ollama).
-model = "nvidia/nemotron-3.5-bolt-e4b"
-# URL base do endpoint remoto (obrigatória para backend "openai").
-base_url = "https://integrate.api.nvidia.com/v1"
-# Nome da variável de ambiente que contém a chave (recomendado; nunca a
-# chave em texto plano aqui). O valor real fica no arquivo `.env` do projeto
-# (ignorado pelo git, permissão 0600) — veja .env.example.
-api_key_env = "NVIDIA_API_KEY"
+# Foco do Formiga: família Gemma 4 local via Ollama (sem chave).
+backend = "ollama"
+# Default: Gemma 4 E4B (Ollama `gemma4:e4b`; perfil builtin gemma4-e4b).
+model = "gemma4:e4b"
+# Outros modelos da família/alternativas:
+# model = "gemma4:e2b"                        # perfil gemma4-e2b (thinking on)
+# model = "nemotron-3.5-bolt"                 # tuning da NVIDIA do E4B
+#
+# Para backend remoto (NIM, OpenAI, vLLM...), descomente:
+# backend = "openai"
+# base_url = "https://integrate.api.nvidia.com/v1"
+# api_key_env = "NVIDIA_API_KEY"   # nome da variável, nunca a chave (ver .env.example)
 temperature = 1.0
 timeout_seconds = 120.0
 # Retries HTTP para 429/5xx no backend remoto, com backoff e Retry-After.
 max_retries = 2
-# Modelos de raciocínio (Nemotron Bolt): thinking ligado por default.
-thinking = true
+# Thinking: o default global é ligado; o perfil gemma4-e4b (ativo com o
+# modelo default) o desliga no agent. Use isto para forçar um valor.
+# thinking = false
 
 # Nota: o endpoint do llama-server não tem chave neste arquivo — use
 # FORMIGA_LLAMACPP_URL (ambiente) ou --llamacpp-url (CLI).
@@ -48,11 +52,25 @@ enabled = ["core", "web", "deepsearch", "memory", "skills"]
 # Diretórios de projeto cujo .formiga/ carrega (allowlist global).
 trusted_projects = []
 
-# Perfil de modelo ativo (sobrescreve a auto-seleção por nome).
+# Perfil de modelo (§9.6 do PRD). Sem destes, o perfil é escolhido pela
+# substring do nome do modelo (ex.: gemma4:e4b → gemma4-e4b).
 [profile]
-# active = "nemotron-3.5-bolt-e4b"
+# model_hint = "gemma4-e4b"      # força um perfil (nome exato)
+# active = "gemma4-e2b"          # alternativa: perfil "ativo"
+# Obs.: a tag do Ollama `nemotron-3.5-bolt` não casa por substring — use
+# active = "nemotron-3.5-bolt-e4b" para forçar o perfil do Bolt.
 
 # Perfis de modelo (§9.6 do PRD): seleção por substring do nome do modelo.
+# Os builtin são gemma4-e2b, gemma4-e4b e nemotron-3.5-bolt-e4b; o que está
+# aqui mescla sobre o builtin correspondente.
+[profiles.gemma4-e2b]
+context_tokens = 32768       # janela útil, não a anunciada
+thinking = true              # GGUF "IT ... Thinking": raciocínio ligado
+temperature = 1.0
+top_p = 0.95
+max_tokens_per_turn = 8192   # thinking consome orçamento de geração
+tool_schema_tokens = 1600
+
 [profiles.gemma4-e4b]
 context_tokens = 32768       # janela útil, não a anunciada
 thinking = false
@@ -61,7 +79,10 @@ top_p = 0.95
 max_tokens_per_turn = 4096
 tool_schema_tokens = 1600
 
-[profiles.nemotron-3.5-bolt-e4b]
+# Nemotron 3.5 Bolt: pós-treinamento (RL) da NVIDIA a partir do
+# Gemma-4-E4B-it — alternativa ao E4B para tool use/saída estruturada.
+# Aspas são obrigatórias: o nome tem pontos (TOML os trata como separador).
+[profiles."nemotron-3.5-bolt-e4b"]
 thinking = true
 temperature = 1.0
 top_p = 0.95

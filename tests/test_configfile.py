@@ -217,3 +217,39 @@ tool_schema_tokens = 1600
     perfil = Profile(name="gemma4-e2b", **config.profiles["gemma4-e2b"])
     assert perfil.context_tokens == 32768
     assert perfil.thinking is False
+
+
+def test_profile_active_do_toml_vira_active_profile(tmp_path):
+    """`[profile] active` força o perfil (chave aceita e tipada)."""
+    path = write_config(
+        tmp_path,
+        """
+[profile]
+active = "nemotron-3.5-bolt-e4b"
+""",
+    )
+    values = load_config_values(path)
+    assert values["active_profile"] == "nemotron-3.5-bolt-e4b"
+    config = Config.from_sources(file_values=values)
+    assert config.active_profile == "nemotron-3.5-bolt-e4b"
+
+
+def test_formiga_toml_example_carrega_sem_erro():
+    """O exemplo enviado com o projeto precisa carregar de verdade.
+
+    Regressão: `[memory] recall/nudge` (bool) e `max_tokens` (int) falhavam
+    no type-check e `[profile] active` era chave desconhecida.
+    """
+    exemplo = Path(__file__).resolve().parent.parent / "formiga.toml.example"
+    values = load_config_values(exemplo)
+    config = Config.from_sources(file_values=values)
+    assert config.memory_recall is True
+    assert config.memory_max_tokens == 1600
+    assert config.model == "gemma4:e4b"
+    # O nome do perfil do Bolt tem pontos: a chave precisa ir entre aspas
+    # senão o TOML cria uma seção aninhada e o build_agent quebra.
+    assert set(config.profiles) == {
+        "gemma4-e2b",
+        "gemma4-e4b",
+        "nemotron-3.5-bolt-e4b",
+    }

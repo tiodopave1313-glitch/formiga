@@ -7,6 +7,42 @@ e este projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [0.5.0a2] — 2026-11-18
 
+### Padrão — Gemma 4 E4B
+
+- `DEFAULT_MODEL` passou de `nemotron-3.5-bolt` para **`gemma4:e4b`**
+  (Gemma 4 E4B, `google/gemma-4-E4B-it` — família-alvo do harness). O nome
+  seleciona por substring o perfil builtin `gemma4-e4b` (thinking desligado,
+  4096 tok/turno) no `formiga agent`.
+- Posicionamento documentado: a família **Gemma 4 E2B/E4B** é o foco e o
+  **Nemotron 3.5 Bolt E4B** é um pós-treinamento (RL/GRPO) da NVIDIA feito a
+  partir do `Gemma-4-E4B-it` — alternativa, não o modelo principal.
+
+### Perfis — força explícita
+
+- `[profile] active` no TOML agora é aceito por `configfile` (antes: erro
+  "chave desconhecida") e vira `Config.active_profile`.
+- `build_agent` usa `active_profile` como fallback do `model_hint`: o
+  `--profile` do `formiga cron add` (e o perfil vindo do gateway) agora
+  efetivamente escolhe o perfil quando a auto-seleção por substring do nome
+  do modelo não casa (ex.: a tag do Ollama `nemotron-3.5-bolt`, sem `-e4b`).
+
+### Documentação
+
+- `README.md` reorganizado por audiência (modelos → quickstart → comandos →
+  comandos de sessão → referência → apêndices → arquitetura/limitações) com a
+  família Gemma 4 como foco e Gemma 4 E4B como default.
+- Corrigidos claims falsos: `formiga memory ...` não é subcomando CLI (a
+  memória vive na sessão via `/memory` e `/recall`); instalação sem extra
+  `gui` não se resume ao `research`; "gateway/cron/memória/skills não
+  incluídos" nas limitações (tudo já implementado); env vars e flags
+  inexistentes removidas (`FORMIGA_MAX_SEARCHES` etc.); auto-seleção de
+  perfil documentada conforme o código real.
+- `formiga.toml.example` e `.env.example` atualizados para o default
+  Gemma 4 E4B (perfis `gemma4-e2b`/`gemma4-e4b`/Bolt, extensões
+  `memory,skills`, vars de orçamento do agent, cron e memória).
+- `docs/smoke_agent.md`: removidos `formiga agent --profile` e
+  `formiga memory ...` (não existem); smoke alinhado ao `gemma4:e4b`.
+
 ### Correções — backend llama.cpp
 
 - `formiga agent --llm-backend llamacpp` falhava sempre com

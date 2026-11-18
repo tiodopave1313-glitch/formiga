@@ -6,7 +6,9 @@ import os
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-DEFAULT_MODEL = "nemotron-3.5-bolt"
+# Default: Gemma 4 E4B (família-alvo do harness; Ollama `gemma4:e4b`).
+# Seleciona o perfil builtin `gemma4-e4b` por normalização do nome.
+DEFAULT_MODEL = "gemma4:e4b"
 DEFAULT_OLLAMA_URL = "http://localhost:11434"
 DEFAULT_SEARXNG_URL = "http://localhost:8080"
 
@@ -25,9 +27,10 @@ DEFAULT_FORMAT_RETRIES = 1
 DEFAULT_MAX_HTTP_BYTES = 2 * 1024 * 1024
 DEFAULT_NETWORK_TIMEOUT = 20.0
 DEFAULT_LLM_TIMEOUT = 300.0  # geração do modelo em CPU leva dezenas de segundos
-# Nemotron 3.5 Bolt E4B recomenda temperature=1.0 e top_p=0.95 nos dois modos
-# de thinking (ficha do modelo); configurável via
-# FORMIGA_LLM_TEMPERATURE / --llm-temperature (0.2 pode ajudar em JSON).
+# A família Gemma 4 (E2B/E4B) e o Nemotron 3.5 Bolt E4B recomendam
+# temperature=1.0 e top_p=0.95 nos dois modos de thinking (fichas dos modelos);
+# configurável via FORMIGA_LLM_TEMPERATURE / --llm-temperature
+# (0.2 pode ajudar em JSON).
 DEFAULT_LLM_TEMPERATURE = 1.0
 
 ENV_LLM_TIMEOUT = "FORMIGA_LLM_TIMEOUT"
@@ -85,11 +88,11 @@ DEFAULT_OPENAI_URL = ""
 DEFAULT_OPENAI_API_KEY_ENV = "NVIDIA_API_KEY"
 # Retries HTTP do backend remoto para 429/5xx, com backoff e Retry-After.
 DEFAULT_MAX_LLM_RETRIES = 2
-# Modelos de raciocínio (ex.: Nemotron 3.5 Bolt E4B) pensam antes do JSON e
-# consomem o teto de geração com `reasoning_content`. Default: ligado — o
-# template do Nemotron Bolt já nasce com thinking ativado e os caps por tarefa
-# recebem folga extra. Desligue (thinking = false / --no-llm-thinking) para
-# respostas diretas e mais velocidade.
+# Modelos de raciocínio (Gemma 4 IT Thinking, Nemotron 3.5 Bolt E4B) pensam
+# antes do JSON e consomem o teto de geração com `reasoning_content`. Default:
+# ligado — os caps por tarefa recebem folga extra. O perfil `gemma4-e4b`
+# (ativo com o default `gemma4:e4b`) desliga o thinking para respostas
+# diretas; force com thinking = true / --llm-thinking.
 DEFAULT_THINKING = True
 
 

@@ -8,10 +8,74 @@ produz uma resposta em Markdown com referências e limitações.
 > delimitam o que pode ser afirmado.**
 
 O sistema não depende de um agente autônomo com ferramentas livres: o fluxo é
-controlado pelo programa e o LLM (default: Nemotron 3.5 Bolt E4B, 8B totais —
-Ollama, llama.cpp ou endpoint remoto OpenAI-compatível) executa tarefas
-pequenas e delimitadas — planejar, formular consulta, extrair citações,
-verificar, comparar, sintetizar e auditar.
+controlado pelo programa e o LLM executa tarefas pequenas e delimitadas —
+planejar, formular consulta, extrair citações, verificar, comparar, sintetizar
+e auditar. Três superfícies de uso: `formiga research` (processo 100%
+controlado), `formiga agent` (harness agêntico com ferramentas) e
+`formiga gateway`/`cron` (daemon e agendamento). O modelo roda no Ollama,
+llama.cpp ou em qualquer endpoint OpenAI-compatível (NVIDIA NIM, OpenAI,
+DeepSeek, vLLM...).
+
+## Modelos: a família Gemma 4 como foco
+
+O Formiga é dimensionado para **modelos pequenos locais**, com a família
+**Gemma 4** (E2B/E4B) como alvo principal:
+
+- **Gemma 4 E4B — modelo padrão.**
+  [`google/gemma-4-E4B-it`](https://huggingface.co/google/gemma-4-E4B-it):
+  4,5B parâmetros efetivos (8B contando embeddings), contexto anunciado de
+  128K, texto/imagem/áudio, thinking configurável, amostragem recomendada
+  1.0/0.95. No Ollama: `gemma4:e4b` (tag `latest` da biblioteca oficial).
+- **Gemma 4 E2B — variante mais leve.**
+  [`google/gemma-4-E2B-it`](https://huggingface.co/google/gemma-4-E2B-it):
+  2,3B efetivos (5,1B contando embeddings), 128K. No Ollama: `gemma4:e2b`.
+- **Nemotron 3.5 Bolt E4B — alternativa, não o foco.**
+  [`nvidia/NVIDIA-Nemotron-3.5-Bolt-E4B-4GB`](https://huggingface.co/nvidia/NVIDIA-Nemotron-3.5-Bolt-E4B-4GB)
+  é um **pós-treinamento da NVIDIA feito a partir do `Gemma-4-E4B-it`**:
+  RL (GRPO) em ambientes de tool use multi-turno, instruction following e
+  saída estruturada/ancorada em entrada. Mesmo tier de tamanho do E4B
+  (4B efetivos / 8B totais). No Ollama: `nemotron-3.5-bolt`.
+
+### Perfis de modelo
+
+O harness agêntico aplica um **perfil** com defaults conservadores de
+contexto, thinking e geração. Perfis builtin:
+
+| Perfil | Modelo | Thinking | tok/turno | Contexto útil |
+|---|---|---|---|---|
+| `gemma4-e4b` **(default)** | Ollama `gemma4:e4b` | desligado | 4096 | 32768 |
+| `gemma4-e2b` | Ollama `gemma4:e2b` | ligado | 8192 | 32768 |
+| `nemotron-3.5-bolt-e4b` | Ollama `nemotron-3.5-bolt` (+ `model_hint`) | ligado | 8192 | 32768 |
+
+Os três usam `temperature = 1.0` e `top_p = 0.95` (fichas dos modelos).
+
+**Seleção do perfil** (nesta ordem):
+
+1. `[profile] model_hint` no TOML ou `FORMIGA_PROFILE_MODEL_HINT` — força um
+   perfil pelo **nome exato** (ex.: `gemma4-e4b`);
+2. em segundo, `[profile] active` no TOML (ou `--profile` no `cron add`) —
+   mesma força, para quem prefere o nome do perfil como "ativo";
+3. senão, **substring normalizada** do nome do modelo: `gemma4:e4b` →
+   `gemma4-e4b`, `gemma4:e2b` → `gemma4-e2b`, `nvidia/nemotron-3.5-bolt-e4b` →
+   `nemotron-3.5-bolt-e4b`.
+
+Atenção à regra da auto-seleção: o nome do modelo precisa **conter** o nome
+do perfil. A tag do Ollama `nemotron-3.5-bolt` (sem o sufixo `-e4b`) não casa
+— nesse caso use `model_hint = "nemotron-3.5-bolt-e4b"`.
+
+Perfis definidos em `[profiles.*]` no TOML **mesclam sobre os builtin**.
+Depois, CLI > env > arquivo sempre sobrepõem o perfil (o perfil só preenche
+campos ainda em default). Os perfis são aplicados pelo harness agêntico
+(`formiga agent`); no `research` valem `[llm]`/env/CLI diretamente.
+
+```toml
+[profile]
+model_hint = "gemma4-e2b"    # força um perfil builtin ou de usuário
+
+[profiles.meu-modelo]        # mescla sobre o builtin com o mesmo nome
+context_tokens = 16384
+thinking = false
+```
 
 ## Instalação
 
@@ -20,15 +84,32 @@ Requer Python 3.11+.
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -e .              # sem o extra `gui`, só `formiga research`
-pip install ".[gui]"          # com o extra `gui`, também `formiga agent --tui`
+pip install -e .              # todos os comandos, exceto a TUI
+pip install ".[gui]"          # + Textual, para `formiga agent --tui`
 ```
 
-Os extras são opcionais: o extra `gui` instala o Textual, necessário apenas para
-a TUI interativa (`formiga agent --tui`). Nem `uv` nem ferramentas além do `pip`
-são exigidas.
+O extra `gui` é o único opcional: sem ele, `research`, `agent` (CLI
+interativa e `--print`), `gateway`, `cron`, `skills` e `trust` funcionam
+normalmente. O repositório também versiona `uv.lock` — com `uv` instalado,
+`uv sync` cria o ambiente e `uv run formiga ...` roda sem ativar o venv.
 
-## Uso
+## Quickstart
+
+```bash
+# 1. Modelo (default: Gemma 4 E4B) e busca
+ollama pull gemma4:e4b
+# SearXNG local com JSON habilitado, ex.: http://localhost:8080
+
+# 2. Pesquisa controlada pelo programa
+formiga research \
+  "O que muda na segurança ao migrar de SSH por senha para SSH com chaves?" \
+  --output ./pesquisa-formiga --verbose
+
+# 3. Harness agêntico
+formiga agent "leia o formiga.toml deste projeto e resuma a configuração"
+```
+
+## Comandos
 
 ### `formiga research` — pesquisa controlada pelo programa
 
@@ -50,7 +131,7 @@ Códigos de saída: `0` relatório gerado (mesmo parcial/bloqueado), `2` entrada
 configuração inválida, `1` falha operacional, `130` interrompido pelo usuário.
 
 Execuções interrompidas podem ser inspecionadas (o checkpoint permanece
-legível), mas **não são retomadas** no MVP.
+legível), mas **não são retomadas**.
 
 ### `formiga agent` — harness agêntico (CLI interativa, TUI ou headless)
 
@@ -63,17 +144,32 @@ formiga agent "qualquer pergunta sobre o projeto"
   streaming token a token, linhas de ferramenta em linha
   (`⚙ bash — command=…`), barra de orçamento
   (`turnos n/24 · llm n/120 · ctx Xk/Yk · ext N ferramentas`) e comandos `/`
-  (`/help` lista tudo; `/tools`, `/ext`, `/budget`, `/new` etc.).
-- Cores são usadas apenas em TTY; `--no-color` (ou `NO_COLOR=1`) desativa e
-  `--no-clear` mantém a tela como está. `CLICOLOR_FORCE=1` força cor em pipes.
+  (veja "Comandos de sessão" abaixo).
 - `--print`: headless, imprime a resposta final no stdout (útil em scripts).
 - `--tui`: TUI Textual (80×24, barra de status com perfil, eventos de extensão
   em linha, `Esc`/`Ctrl+C` cooperativos). Requer o extra `gui`.
 
+Flags de sessão e ambiente:
+
+| Flag | Efeito |
+|---|---|
+| `--continue` | Retoma a última sessão do workdir (in-process) |
+| `--resume ID` | Retoma a sessão com o ID informado (in-process) |
+| `--session-dir PATH` | Diretório da sessão (default `sessoes/<timestamp_id>`) |
+| `--local` | Execução in-process, sem usar o daemon do gateway |
+| `--no-color` | Desativa cores (equivale a `NO_COLOR=1`) |
+| `--no-clear` | Não limpa a tela ao iniciar |
+| `--verbose` | Eventos operacionais adicionais |
+
+O agent anexa ao `formiga gateway` automaticamente quando ele está no ar
+(sobe on-demand se necessário); `--print` e `--local` sempre rodam
+in-process. As demais flags (`--model`, `--llm-backend`, `--searxng-url`...)
+são as mesmas do `research`, listadas na seção de referência.
+
 Configuração via CLI, variáveis de ambiente (`FORMIGA_*`) ou `./formiga.toml`
 (precedência: CLI > env > arquivo > defaults). Veja `formiga.toml.example`.
 
-### `formiga gateway` — daemon local (Fase 6)
+### `formiga gateway` — daemon local
 
 O gateway é um processo WebSocket apenas em loopback que **possui o `AgentLoop`
 e as sessões**, sobrevivendo ao terminal. A CLI e a TUI se tornam clientes que
@@ -100,10 +196,10 @@ formiga gateway stop
   executar; sobrevivem a uma queda do gateway.
 - **`--print` e `--local`**: continuam in-process (sem depender do daemon),
   ideais para scripts e testes.
-- Um gateway por diretório de trabalho; sem autenticação nem TLS no MVP
-  (single-user, loopback).
+- Um gateway por diretório de trabalho; sem autenticação nem TLS (single-user,
+  loopback).
 
-### `formiga cron` — tarefas agendadas (Fase 7)
+### `formiga cron` — tarefas agendadas
 
 O cron agenda tarefas do agente (prompt + orçamento + sessão própria), executadas
 pelo gateway. Não é cron de shell: cada job roda como uma sessão de agente
@@ -130,45 +226,21 @@ formiga cron rm <id>
 - **Catchup**: com o gateway parado na hora marcada, o disparo é skipado
   (default) ou executado uma vez ao voltar (`--catchup once`).
 - **Orçamento por job**: `--max-turns`, `--max-llm-calls`, `--timeout-seconds`.
+- **Modelo/perfil por job**: `--model`, `--profile` (ex. `--profile gemma4-e2b`).
 - Cada run grava em `sessoes/cron/<job>/<timestamp>/` (mesmos artefatos de
   sempre); eventos `job_start`/`job_end` são broadcast aos clientes anexados.
 - Config: `[cron] catchup = "skip"`, `tz = "America/Sao_Paulo"`;
   env `FORMIGA_CRON_CATCHUP` / `FORMIGA_CRON_TZ`.
 
-### `formiga memory` — memória estilo Hermes (Fase 8)
-
-A memória tem três camadas: **recall** (busca FTS5 em sessões passadas),
-**memória curada** (`MEMORY.md` com nudge + aprovação humana) e **perfil**
-(`USER.md` injetado no prompt). Tudo fica em `~/.formiga/memory/` e o índice
-em `~/.formiga/index.db`. É uma extensão builtin (`memory`) ligada por
-default.
+### `formiga skills`, `trust`/`untrust`, `version`
 
 ```bash
-# Busque o que a gente falou sobre X em sessões passadas
-formiga agent "o que a gente decidiu sobre o deploy?"  # o modelo usa /recall
-
-# Veja o que está na memória curada e no perfil
-formiga memory show
-
-# Veja sugestões aguardando aprovação e as aplique
-formiga memory pending
-formiga memory save
+formiga skills list         # skills globais + do projeto confiável
+formiga trust ./meu-proj    # allowlist global: carrega .formiga/extensions
+                            # e .formiga/skills do projeto
+formiga untrust ./meu-proj  # remove da allowlist
+formiga version             # versão instalada
 ```
-
-- **Recall**: `recall(query, limit?)` encontra trechos do `messages.json` de
-  sessões antigas (índice incremental por mtime, FTS5).
-- **Nudge**: ao fim da sessão (e a cada 10 turnos), o harness sugere salvar
-  o que aprendeu; a gravação só ocorre pelo comando humano `/memory save`
-  (o modelo nunca grava sozinho — staging em `pending.json`).
-- **Perfil**: `USER.md` vira seção do system prompt (≤ 600 tokens).
-- **Guardrails**: memória é dado não confiável (cabeçalho de aviso), teto
-  rígido (≤ 1 000 tokens memória + 600 tokens perfil, truncamento),
-  credenciais recusadas, arquivo corrompido gera aviso e não derruba.
-- Config: `[memory] recall = true`, `nudge = true`, `max_tokens = 1600`;
-  env `FORMIGA_MEMORY_RECALL` / `FORMIGA_MEMORY_NUDGE` /
-  `FORMIGA_MEMORY_MAX_TOKENS`.
-
-### `formiga skills` — conhecimento declarativo (Fase 9)
 
 Skills são procedimentos reutilizáveis em Markdown (`SKILL.md`), não código.
 Ficam **fora do prompt** até serem chamadas: custo zero quando ociosas. São
@@ -176,7 +248,6 @@ carregadas de `~/.formiga/skills/` (globais) e de `.formiga/skills/` do projeto
 (somente se o projeto estiver na allowlist de trust).
 
 ```bash
-# Crie uma skill global manualmente
 mkdir -p ~/.formiga/skills/revisar-pr
 cat > ~/.formiga/skills/revisar-pr/SKILL.md <<'EOF'
 ---
@@ -188,48 +259,134 @@ when_to_use: Ao revisar um PR
 2. Verifique testes e casos de borda.
 3. Aponte riscos com arquivo e linha.
 EOF
-
-# Liste as skills disponíveis (globais + projeto confiável)
-formiga skills list
 ```
 
 Dentro do `formiga agent`, `/skills` lista as skills e `/revisar-pr` agenda a
 expansão do conteúdo para a próxima mensagem (registrada no evento
 `skill_expanded`). O modelo também pode propor novas skills com
 `skill_manage(action="write")`: a proposta fica em
-`~/.formiga/skills/pending.json` e **nada é gravado** até um humano aprovar com
-`/skills approve <id>` (ou descartar com `/skills reject <id>`).
+`~/.formiga/skills/pending.json` e **nada é gravado** até um humano aprovar
+com `/skills approve <id>` (ou descartar com `/skills reject <id>`).
 
-## Opções de `research`
+## Comandos de sessão (dentro do `formiga agent`)
+
+Digitando `/` na CLI interativa (e na TUI). `Ctrl+C` interrompe o turno em
+andamento; `Ctrl+D` sai.
+
+| Comando | O que faz |
+|---|---|
+| `/help` | Lista comandos, skills e seções contribuídas pelas extensões |
+| `/tools` | Ferramentas registradas, por extensão |
+| `/ext` | Extensões carregadas (fonte, status, erros) |
+| `/budget` | Orçamento da sessão: turnos, chamadas LLM, contexto, consumo por ferramenta |
+| `/new sim` | Nova sessão (exige a confirmação `sim`; a anterior permanece em disco) |
+| `/cron` | Lista as tarefas agendadas (`~/.formiga/jobs.json`) |
+| `/recall <query>` | Busca FTS5 em sessões passadas (memória de sessões) |
+| `/memory [show\|pending\|save [id]\|clear\|edit]` | Memória curada (`MEMORY.md`) e perfil (`USER.md`); `save` aplica sugestões pendentes — o modelo nunca grava sozinho |
+| `/skills [list\|pending\|approve <id>\|reject <id>]` | Skills disponíveis e aprovação de propostas |
+| `/<skill>` | Expande a skill correspondente na próxima mensagem |
+
+### Memória (extensão `memory`, ligada por default)
+
+A memória tem três camadas: **recall** (busca FTS5 em sessões passadas),
+**memória curada** (`MEMORY.md` com nudge + aprovação humana) e **perfil**
+(`USER.md` injetado no prompt). Tudo fica em `~/.formiga/memory/` e o índice
+em `~/.formiga/index.db`.
+
+- **Ferramentas do modelo**: `recall(query, limit?)` e `memory_save` (grava
+  em `pending.json` — staging, nunca direto no `MEMORY.md`).
+- **Nudge**: ao fim da sessão (e a cada 10 turnos), o harness sugere salvar
+  o que aprendeu; a gravação só ocorre pelo comando humano `/memory save`.
+- **Perfil**: `USER.md` vira seção do system prompt (≤ 600 tokens).
+- **Guardrails**: memória é dado não confiável (cabeçalho de aviso), teto
+  rígido (≤ 1 000 tokens memória + 600 tokens perfil, truncamento),
+  credenciais recusadas, arquivo corrompido gera aviso e não derruba.
+- Config: `[memory] recall = true`, `nudge = true`, `max_tokens = 1600`;
+  env `FORMIGA_MEMORY_RECALL` / `FORMIGA_MEMORY_NUDGE` /
+  `FORMIGA_MEMORY_MAX_TOKENS`.
+
+## Referência
+
+### Flags de `formiga research` (e `formiga agent`)
 
 | Opção | Finalidade |
 |---|---|
-| `--output PATH` | Diretório de saída (padrão `./formiga-out`) |
+| `--output PATH` | Diretório de saída (padrão `./formiga-out`) — só no `research` |
 | `--config PATH` | Arquivo de configuração TOML (default: `./formiga.toml` se existir; ver abaixo) |
-| `--model NAME` | Nome do modelo no Ollama ou ID do modelo no backend remoto (default: `nemotron-3.5-bolt`) |
-| `--ollama-url URL` | Endpoint do Ollama |
+| `--model NAME` | Nome do modelo no Ollama ou ID no backend remoto (default: `gemma4:e4b`) |
+| `--ollama-url URL` | Endpoint do Ollama (default `http://localhost:11434`) |
 | `--searxng-url URL` | Endpoint da instância SearXNG (JSON habilitado) |
 | `--llm-backend {ollama,llamacpp,openai}` | Backend do modelo (default: ollama) |
 | `--llm-base-url URL` | URL base do endpoint remoto OpenAI-compatível (ex.: `https://integrate.api.nvidia.com/v1`) |
 | `--api-key-env NAME` | Nome da variável de ambiente com a chave do endpoint remoto (default: `NVIDIA_API_KEY`) |
-| `--llm-thinking` | Deixar o modelo raciocinar antes do JSON (default: **ligado**; desligue com `--no-llm-thinking`) |
+| `--llm-thinking` / `--no-llm-thinking` | Raciocínio antes da resposta (default: **ligado**; no agent o perfil `gemma4-e4b` o desliga) |
 | `--fallback-backend {ollama,llamacpp,openai}` | Backup **opt-in**: ativa somente após falhas do backend principal (default: sem backup) |
 | `--fallback-after-failures N` | Falhas consecutivas do principal antes do backup assumir (default 1) |
 | `--llm-max-retries N` | Retries HTTP (429/5xx) no backend remoto, com backoff (default 2) |
 | `--llamacpp-url URL` | Endpoint do llama-server (OpenAI-compatível) |
-| `--llamacpp-thinking` | Deixar o modelo raciocinar antes do JSON (default: **ligado**; desligue com `--no-llamacpp-thinking`) |
-| `--max-searches N` | Limite de buscas (default 12) |
-| `--max-pages N` | Limite de páginas (default 18) |
-| `--max-llm-calls N` | Limite total de chamadas (default 40; 8 reservadas para síntese/auditoria) |
-| `--timeout-seconds N` | Tempo máximo da execução (default 900) |
+| `--llamacpp-thinking` / `--no-llamacpp-thinking` | Thinking só no llama.cpp (default: ligado) |
+| `--max-searches N` | Limite de buscas (default 12) — só no `research` |
+| `--max-pages N` | Limite de páginas (default 18) — só no `research` |
+| `--max-llm-calls N` | Limite total de chamadas (default 40; 8 reservadas para síntese/auditoria; no agent: 120) |
+| `--timeout-seconds N` | Tempo máximo da execução (default 900; no agent: 1800) |
 | `--llm-timeout-seconds N` | Timeout por chamada ao modelo (default 300; CPU lenta pode exigir mais) |
-| `--llm-temperature T` | Temperatura de amostragem (default 1.0, conforme a ficha do Nemotron 3.5 Bolt; 0.2 pode ajudar em JSON estruturado) |
-| `--overwrite` | Autoriza sobrescrever um diretório de saída existente |
+| `--llm-temperature T` | Temperatura de amostragem (default 1.0, conforme as fichas dos modelos; 0.2 pode ajudar em JSON estruturado) |
+| `--overwrite` | Autoriza sobrescrever um diretório de saída existente (só no `research`) |
 | `--verbose` | Eventos operacionais no stderr |
 
-## Arquivo de configuração
+### Variáveis de ambiente
 
-Além da CLI e das variáveis de ambiente, o Formiga lê um arquivo TOML.
+Todas são lidas por `Config.from_env`; o `.env` do projeto apenas preenche
+variáveis ausentes (ver "Arquivo de segredos").
+
+```text
+# Configuração geral
+FORMIGA_CONFIG=caminho/formiga.toml     # arquivo TOML explícito
+FORMIGA_ENV_FILE=caminho/secrets.env    # arquivo de segredos explícito
+
+# Backend e endpoints
+FORMIGA_LLM_BACKEND=ollama              # ollama | llamacpp | openai
+FORMIGA_MODEL=gemma4:e4b                # default
+FORMIGA_OLLAMA_URL=http://localhost:11434
+FORMIGA_SEARXNG_URL=http://localhost:8080
+FORMIGA_LLAMACPP_URL=http://localhost:8080
+FORMIGA_OPENAI_URL=https://integrate.api.nvidia.com/v1
+FORMIGA_OPENAI_API_KEY_ENV=NVIDIA_API_KEY
+FORMIGA_LLM_TIMEOUT=300                 # timeout por chamada ao modelo (segundos)
+FORMIGA_LLM_TEMPERATURE=1.0             # amostragem (fichas: 1.0 / top_p 0.95)
+FORMIGA_LLM_THINKING=1                  # 0 = desligar o raciocínio (default: 1)
+FORMIGA_LLAMACPP_THINKING=1             # override do thinking só no llama.cpp
+
+# Failover opt-in (backup; nunca automático)
+FORMIGA_FALLBACK_BACKEND=               # ollama | llamacpp | openai
+FORMIGA_FALLBACK_AFTER_FAILURES=1       # falhas consecutivas antes do backup assumir
+
+# Harness agêntico
+FORMIGA_AGENT_MAX_TURNS=24
+FORMIGA_AGENT_MAX_LLM_CALLS=120
+FORMIGA_AGENT_TIMEOUT_SECONDS=1800
+FORMIGA_AGENT_MAX_DEEP_SEARCHES=2
+FORMIGA_AGENT_MAX_WEB_SEARCHES=6
+FORMIGA_AGENT_MAX_WEB_FETCHES=8
+FORMIGA_AGENT_TOOL_RESULT_CHARS=4000
+FORMIGA_AGENT_WORKDIR=.
+FORMIGA_AGENT_MAX_CONTEXT_TOKENS=32768
+FORMIGA_AGENT_TOOL_SCHEMA_TOKENS=1600
+
+# Extensões e perfis
+FORMIGA_EXTENSIONS_ENABLED=core,web,deepsearch,memory,skills   # default
+FORMIGA_PROFILE_MODEL_HINT=            # força um perfil (ex.: gemma4-e2b)
+
+# Cron e memória
+FORMIGA_CRON_CATCHUP=skip              # skip | once
+FORMIGA_CRON_TZ=America/Sao_Paulo
+FORMIGA_MEMORY_RECALL=1
+FORMIGA_MEMORY_NUDGE=1
+FORMIGA_MEMORY_MAX_TOKENS=1600
+```
+
+### Arquivo de configuração
+
 Precedência: **CLI > variáveis de ambiente > arquivo > defaults**. Sem
 `--config`/`FORMIGA_CONFIG`, ele procura `./formiga.toml` e depois
 `~/.config/formiga/config.toml`. Veja o exemplo completo em
@@ -238,16 +395,17 @@ conter uma chave de API com permissão `0600`).
 
 ```toml
 [llm]
-backend = "openai"                       # ollama | llamacpp | openai
-model = "nvidia/nemotron-3.5-bolt-e4b"
-base_url = "https://integrate.api.nvidia.com/v1"
-api_key_env = "NVIDIA_API_KEY"           # nome da variável, nunca a chave
+backend = "ollama"                      # ollama | llamacpp | openai
+model = "gemma4:e4b"                    # default (Ollama local, sem chave)
 temperature = 1.0
 timeout_seconds = 120.0
 max_retries = 2
-thinking = true                          # raciocínio antes do JSON (default)
-# Backup opt-in (nunca automático): descomente para ativar.
-# fallback_backend = "ollama"
+# thinking = false                      # override manual do perfil
+# Para backend remoto (NIM, OpenAI, vLLM...):
+# backend = "openai"
+# base_url = "https://integrate.api.nvidia.com/v1"
+# api_key_env = "NVIDIA_API_KEY"        # nome da variável, nunca a chave
+# fallback_backend = "ollama"           # backup opt-in (nunca automático)
 # fallback_after_failures = 1
 
 [search]
@@ -259,12 +417,6 @@ max_pages = 18
 max_llm_calls = 40
 timeout_seconds = 900
 
-[extensions]
-# Ordem de carregamento = ordem desta lista.
-enabled = ["core", "web", "deepsearch", "memory", "skills"]
-# Diretórios de projeto cujo .formiga/ carrega (allowlist global).
-trusted_projects = []
-
 [agent]
 max_turns = 24
 max_llm_calls = 120
@@ -274,11 +426,21 @@ max_web_searches = 6
 max_web_fetches = 8
 tool_result_chars = 4000
 workdir = "."
+max_context_tokens = 32768
+tool_schema_tokens = 1600
 
-# Perfis de modelo (§9.6 do PRD): seleção por substring do nome do modelo.
+[extensions]
+# Ordem de carregamento = ordem desta lista.
+enabled = ["core", "web", "deepsearch", "memory", "skills"]
+# Diretórios de projeto cujo .formiga/ carrega (allowlist global).
+trusted_projects = []
+
 [profile]
-# active = "nemotron-3.5-bolt-e4b"   # sobrescreve a auto-seleção
+# model_hint = "gemma4-e4b"             # força um perfil (nome exato)
+# active = "gemma4-e2b"                  # alternativa: perfil "ativo"
+# (sem nenhum dos dois, o perfil é escolhido pela substring do modelo)
 
+# Perfis de modelo: mesclam sobre os builtin (§9.6 do PRD).
 [profiles.gemma4-e2b]
 context_tokens = 32768                 # janela útil, não a anunciada
 thinking = true                        # GGUF "IT ... Thinking": raciocínio ligado
@@ -288,25 +450,30 @@ max_tokens_per_turn = 8192             # thinking consome orçamento de geraçã
 tool_schema_tokens = 1600
 
 [profiles.gemma4-e4b]
-context_tokens = 32768                 # janela útil, não a anunciada
+context_tokens = 32768
 thinking = false
 temperature = 1.0
 top_p = 0.95
 max_tokens_per_turn = 4096
 tool_schema_tokens = 1600
 
-[profiles.nemotron-3.5-bolt-e4b]
+[profiles."nemotron-3.5-bolt-e4b"]
 thinking = true
 temperature = 1.0
 top_p = 0.95
 
 [ext.core]
 unsafe_bash = false                    # AGENT_UNSAFE=1 para permitir
+
+[cron]
+catchup = "skip"                       # skip | once
+tz = "America/Sao_Paulo"
+
+[memory]
+recall = true
+nudge = true
+max_tokens = 1600
 ```
-
-## Configuração
-
-Precedência: argumento da CLI > variável de ambiente > arquivo TOML > valor padrão.
 
 ### Arquivo de segredos (`.env`)
 
@@ -325,39 +492,16 @@ NVIDIA_API_KEY=nvapi-...
 - A chave nunca aparece em `repr(Config)`, mensagens de erro, `state.json`
   nem `events.jsonl`.
 
-```text
-FORMIGA_CONFIG=caminho/formiga.toml
-FORMIGA_ENV_FILE=caminho/secrets.env
-FORMIGA_MODEL=nemotron-3.5-bolt
-FORMIGA_OLLAMA_URL=http://localhost:11434
-FORMIGA_SEARXNG_URL=http://localhost:8080
-FORMIGA_LLM_BACKEND=ollama          # ou: llamacpp, openai
-FORMIGA_LLAMACPP_URL=http://localhost:8080   # endpoint do llama-server
-FORMIGA_OPENAI_URL=https://integrate.api.nvidia.com/v1   # backend remoto
-FORMIGA_OPENAI_API_KEY_ENV=NVIDIA_API_KEY
-FORMIGA_FALLBACK_BACKEND=           # backup opt-in: ollama | llamacpp | openai
-FORMIGA_FALLBACK_AFTER_FAILURES=1   # falhas consecutivas antes do backup assumir
-FORMIGA_LLM_TIMEOUT=300             # timeout por chamada ao modelo (segundos)
-FORMIGA_LLM_TEMPERATURE=1.0         # temperatura de amostragem (ficha do modelo)
-FORMIGA_LLM_THINKING=1              # 0 = desligar o raciocínio (default: 1)
-FORMIGA_LLAMACPP_THINKING=1         # override do thinking só no llama.cpp
-FORMIGA_AGENT_MAX_TURNS=24
-FORMIGA_AGENT_MAX_LLM_CALLS=120
-FORMIGA_AGENT_TIMEOUT_SECONDS=1800
-FORMIGA_AGENT_MAX_CONTEXT_TOKENS=32768
-FORMIGA_AGENT_TOOL_SCHEMA_TOKENS=1600
-FORMIGA_PROFILE_MODEL_HINT=
-FORMIGA_EXTENSIONS_ENABLED=core,web,deepsearch
-```
-
 A chave do backend remoto nunca vai na CLI. Fontes possíveis, em ordem de
 preferência: variável de ambiente definida manualmente, `.env` do projeto
 (nome indicado por `api_key_env` / `--api-key-env`, default
 `NVIDIA_API_KEY`) ou `api_key = "..."` no arquivo TOML com permissão `0600`.
 
-O modelo padrão é uma escolha inicial de implementação, não uma exigência de
-qualidade. Instale-o antes no backend escolhido e configure uma instância
-SearXNG própria com o formato JSON habilitado (`search.formats: [html, json]`).
+Instale o modelo escolhido no backend correspondente (`ollama pull gemma4:e4b`
+para o default) e configure uma instância SearXNG própria com o formato JSON
+habilitado (`search.formats: [html, json]`).
+
+## Apêndice: backends e geração
 
 ### Backends de modelo
 
@@ -402,13 +546,16 @@ Ollama local como backup.
 Para usar um `llama-server` compilado localmente:
 
 ```bash
+llama-server -m caminho/Gemma-4-E4B-Q4_K_M.gguf \
+  --alias gemma4-e4b -c 32768 --jinja
+
 .venv/bin/formiga research "..." \
-  --llm-backend llamacpp --llamacpp-url http://127.0.0.1:9931 \
+  --llm-backend llamacpp --llamacpp-url http://127.0.0.1:8080 \
   --output ./pesquisa-formiga
 ```
 
-Receita recomendada para o Nemotron 3.5 Bolt (thinking com orçamento de
-raciocínio controlado no servidor):
+Para o Nemotron 3.5 Bolt (thinking com orçamento de raciocínio controlado no
+servidor):
 
 ```bash
 llama-server -m Nemotron-3.5-Bolt-E4B-Q4_K_M.gguf \
@@ -420,32 +567,29 @@ Builds antigas do llama-server que não suportam `schema` dentro de
 `response_format` também funcionam — o campo é ignorado e a validação fica no
 harness.
 
-### Modelo adotado como padrão: Nemotron 3.5 Bolt E4B 4GB
+### Thinking e amostragem
 
-O default é [`nvidia/NVIDIA-Nemotron-3.5-Bolt-E4B-4GB`](https://huggingface.co/nvidia/NVIDIA-Nemotron-3.5-Bolt-E4B-4GB)
-(8B totais, 4B efetivos, Q4_K_M ~6,2 GB, contexto 64K), post-treinado pela
-NVIDIA sobre a Gemma 4 E4B com RL em ambientes de saída estruturada,
-instruction following e tool use. No Ollama: `nemotron-3.5-bolt`; na NIM
-remota: `nvidia/nemotron-3.5-bolt-e4b`. Detalhes que afetam o Formiga:
-
-- **Thinking**: o reasoning é controlado pelo chat template
-  (`chat_template_kwargs: {"enable_thinking": true/false}`) e o **default do
-  próprio modelo é ligado** — o Formiga segue esse default e envia o kwarg
-  explicitamente no `llamacpp` e no `openai`, e `think: true` no Ollama.
-  Endpoints que rejeitam o campo recebem uma repetição sem ele. Para desligar
-  (respostas diretas, mais velocidade): `--no-llm-thinking`, `thinking = false`
-  ou `FORMIGA_LLM_THINKING=0`. Com thinking ligado, os caps por tarefa ganham
-  folga extra de tokens e o teto dobrado sobe para 4096.
-- **Orçamento de raciocínio no llama-server**: opcionalmente limite o thinking
-  no servidor com `--reasoning-budget N` (o servidor corta o raciocínio no
-  teto, preservando espaço para o JSON).
-- **Amostragem**: a ficha recomenda **temperature 1.0 e top_p 0.95** nos dois
-  modos — é o default do Formiga (`--llm-temperature` para ajustar; 0.2 pode
-  ajudar em JSON estruturado sem gramática).
+- **Default do Formiga**: thinking **ligado** a nível de config
+  (`--no-llm-thinking` / `thinking = false` / `FORMIGA_LLM_THINKING=0`
+  desligam); com thinking ligado, os caps por tarefa ganham folga extra de
+  tokens e o teto dobrado sobe para 4096.
+- **Perfil `gemma4-e4b` (default)**: desliga o thinking no harness agêntico
+  para respostas diretas e mais velocidade — é o comportamento que você vê
+  ao rodar `formiga agent` sem mudar nada. Force o raciocínio com
+  `thinking = true` no perfil ou `--llm-thinking`.
+- **Perfis `gemma4-e2b` e `nemotron-3.5-bolt-e4b`**: thinking ligado
+  (GGUFs "IT ... Thinking" e o template do Bolt nascem com raciocínio ativo).
+- **Amostragem**: as fichas da família Gemma 4 e do Bolt recomendam
+  **temperature 1.0 e top_p 0.95** — é o default do Formiga
+  (`--llm-temperature` para ajustar; 0.2 pode ajudar em JSON estruturado sem
+  gramática).
 - **Truncamento**: se o raciocínio consumir o teto e o JSON for cortado
   (`finish_reason: "length"`), a segunda tentativa dobra o cap. A resposta
   bruta falha aparece no evento `llm_call` de `events.jsonl`. Blocos
   `ANNELing ... ANNELs` inline no `content` são descartados antes do parse.
+- **Orçamento de raciocínio no llama-server**: opcionalmente limite o thinking
+  no servidor com `--reasoning-budget N` (o servidor corta o raciocínio no
+  teto, preservando espaço para o JSON).
 
 No agente, `reasoning_content` é mantido fora do histórico e do texto
 mostrado ao usuário. Alguns GGUFs de thinking ignoram
@@ -459,7 +603,7 @@ texto, o agente responde com uma abstenção explícita e registra
 Com Ollama e SearXNG disponíveis:
 
 ```bash
-ollama pull nemotron-3.5-bolt
+ollama pull gemma4:e4b
 # SearXNG com JSON habilitado, ex.: http://localhost:8080
 
 formiga research \
@@ -499,8 +643,8 @@ O acesso a páginas é separado dos endpoints configurados (que podem ser
 `localhost`). O fetcher aceita apenas HTTP/HTTPS, bloqueia loopback, redes
 privadas, link-local e endereços reservados **a cada redirecionamento**, limita
 tamanho (2 MB), tempo (20 s), redirecionamentos (5) e tipos de conteúdo, e não
-usa proxies herdados do ambiente. Limitação do MVP: a validação ocorre antes de
-cada conexão, sem fixação de IP na conexão TLS.
+usa proxies herdados do ambiente. Limitação: a validação ocorre antes de cada
+conexão, sem fixação de IP na conexão TLS.
 
 ## Arquitetura
 
@@ -509,10 +653,13 @@ formiga/
 ├── pyproject.toml
 ├── docs/prd.md            # especificação (fonte da verdade do escopo)
 ├── docs/prd_v2.md         # roteiro v2 (Fases 1–11 do Formiga Agent)
+├── docs/prd_agent.md      # PRD do harness agêntico
+├── docs/smoke_agent.md    # smoke manual do agent
 ├── formiga.toml.example   # exemplo de arquivo de configuração
 ├── .env.example           # exemplo de arquivo de segredos
 ├── src/formiga/
-│   ├── cli.py             # argparse, comandos (research, agent, trust, untrust)
+│   ├── cli.py             # argparse: research, agent, gateway, cron,
+│   │                      #   skills, trust, untrust, version
 │   ├── config.py          # precedência CLI > env > default
 │   ├── configfile.py      # arquivo de config TOML (default < arquivo < env < CLI)
 │   ├── envfile.py         # arquivo .env que só preenche variáveis ausentes
@@ -526,24 +673,35 @@ formiga/
 │   ├── llamacpp.py        # cliente llama-server (OpenAI-compatível)
 │   ├── openai.py          # cliente remoto OpenAI-compatível (NVIDIA, etc.)
 │   ├── fallback.py        # failover opt-in entre backends (circuit breaker)
+│   ├── search.py          # protocolo de busca (provedor via adaptador)
 │   ├── searxng.py         # cliente SearXNG JSON
+│   ├── fetch.py           # protocolo de fetch de páginas
 │   ├── fetcher.py         # fetch seguro (seção 13 do PRD)
 │   ├── extract.py         # Trafilatura, trechos, seleção lexical
 │   ├── evidence.py        # verificação determinística + textos das fontes
 │   ├── report.py          # relatório a partir de afirmações, não snippets
-│   └── storage.py         # state.json atômico, events.jsonl
-│   └── agent/             # harness agêntico (Formiga Agent, Fases 1–5)
+│   ├── storage.py         # state.json atômico, events.jsonl
+│   └── agent/             # harness agêntico (Formiga Agent)
 │       ├── loop.py        # loop de turnos (orçamento, eviction, âncora)
 │       ├── factory.py     # build_agent: discovery → registry → loop
-│       ├── profiles.py    # perfis de modelo (gemma4-e2b, gemma4-e4b, nemotron-3.5-bolt-e4b)
+│       ├── profiles.py    # perfis: gemma4-e2b, gemma4-e4b, nemotron-3.5-bolt-e4b
 │       ├── guardrails.py  # AgentBudget, ToolBudgets, AntiLoop
 │       ├── session.py     # sessão em disco (messages.json, events.jsonl)
+│       ├── chat.py        # construção do chat client por backend
+│       ├── client.py      # cliente de rede do agent
+│       ├── stream.py      # streaming de respostas
+│       ├── parser.py      # parse de tool calls
+│       ├── prompts.py     # system prompt do agente
+│       ├── cron.py        # JobStore das tarefas agendadas
+│       ├── gateway.py     # daemon WebSocket em loopback (Fase 6)
 │       ├── ui.py          # cores, limpeza de tela e painel da CLI
+│       ├── tools/         # contratos (Tool, ToolResult) e compatibilidade
 │       ├── extensions/    # engine de extensões (registro, hooks, eventos)
 │       │   ├── api.py     # ExtensionAPI (register_tool, on, ui.notify)
-│       │   ├── registry.py# ExtensionRegistry, ExtensionContext, set_event_sink
+│       │   ├── registry.py# ExtensionRegistry, ExtensionContext, event sink
 │       │   ├── budget.py  # estimativa de tokens, schema_tokens, eviction
-│       │   └── discovery.py# descoberta builtin / .formiga/extensions / entry-points
+│       │   ├── discovery.py# descoberta builtin / .formiga/extensions / entry-points
+│       │   └── events.py  # eventos do ciclo de extensão
 │       └── tui/           # TUI Textual (80×24, barra de status)
 │           ├── app.py     # AgentApp, _handle_event, _update_status
 │           └── controller.py
@@ -551,7 +709,7 @@ formiga/
 │       ├── core/          # bash, read, edit (+ /tools, /ext, /budget, /new)
 │       ├── web/           # web_search
 │       ├── deepsearch/    # deep_search com progresso em linha
-│       ├── memory/        # recall + MEMORY.md/USER.md (Fase 8)
+│       ├── memory/        # recall, memory_save, /recall, /memory (Fase 8)
 │       └── skills/        # SKILL.md + skill_manage com aprovação (Fase 9)
 └── tests/                 # testes offline com adaptadores falsos
 ```
@@ -571,15 +729,16 @@ adaptadores falsos (`tests/fakes.py`, `tests/fixtures/`).
 
 ## Limitações conhecidas
 
-- Um 8B verificando afirmações não é validação independente: rótulos de
-  verificação são sinais, não prova.
-- O mesmo 8B sintetiza e audita — o relatório distingue afirmações diretas,
+- Um modelo pequeno verificando afirmações não é validação independente:
+  rótulos de verificação são sinais, não prova.
+- O mesmo modelo sintetiza e audita — o relatório distingue afirmações diretas,
   inferências e recomendações, mas erros de leitura são possíveis.
-- Execuções não são retomáveis; apenas inspecionáveis.
+- Execuções de `research` não são retomáveis; apenas inspecionáveis.
 - Sem leitura de PDF/imagem, sem embeddings, sem reranking, sem execução
   paralela — por escolha do escopo do MVP.
 - Avaliação formal de qualidade (perguntas anotadas, revisão humana) fica
   para depois do MVP, conforme a seção 14 do PRD.
-- Gateway local com retomada de sessões (`formiga gateway`), tarefas agendadas
-  (`formiga cron`), memória estilo Hermes (`ext/memory`), skills e adapters de
-  plataformas de mensagem são fases 6–11 do PRD — pós-MVP, não incluídos.
+- Gateway local sem autenticação nem TLS (single-user, loopback); token/pairing
+  ficam para a Fase 10.
+- Integração com plataformas de mensagem (Fase 10) e expansões avançadas
+  (Fase 11) não estão incluídas.

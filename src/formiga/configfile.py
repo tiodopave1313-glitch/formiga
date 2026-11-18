@@ -85,6 +85,9 @@ _EXTENSIONS_KEYS = {
 }
 _PROFILE_KEYS = {
     "model_hint": "profile_model_hint",
+    # Força o perfil quando a auto-seleção por nome não casa (ex.: a tag do
+    # Ollama `nemotron-3.5-bolt` não contém o nome do perfil builtin).
+    "active": "active_profile",
 }
 _CRON_KEYS = {
     "catchup": "cron_catchup",
@@ -122,9 +125,10 @@ _INT_FIELDS = {
     "agent_tool_result_chars",
     "max_context_tokens",
     "tool_schema_tokens",
+    "memory_max_tokens",
 }
-_BOOL_FIELDS = {"llm_thinking"}
-_NULLABLE_STR_FIELDS = {"fallback_backend", "profile_model_hint"}
+_BOOL_FIELDS = {"llm_thinking", "memory_recall", "memory_nudge"}
+_NULLABLE_STR_FIELDS = {"fallback_backend", "profile_model_hint", "active_profile"}
 _DEFAULT_NAME = "formiga.toml"
 _GLOBAL_PATH = Path("~/.formiga/config.toml")
 _XDG_PATH = Path("~/.config/formiga/config.toml")

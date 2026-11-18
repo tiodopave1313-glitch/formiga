@@ -8,7 +8,8 @@ para confirmar o comportamento com um modelo pequeno de verdade.
 ## Pré-requisitos
 
 - Uma das duas: chave do NIM em `NVIDIA_API_KEY` **ou** Ollama/llama-server local
-  com um modelo 8B (ex.: `Nemotron-3.5-Bolt-E4B` ou `Gemma-4-E4B`).
+  com um modelo da família-alvo (default: Gemma 4 E4B — `ollama pull gemma4:e4b`;
+  alternativas: `gemma4:e2b`, `nemotron-3.5-bolt`).
 - SearXNG local para `web_search`/`deep_search` (ex.: `http://localhost:8080`).
 - Terminal com pelo menos 80×24 (funciona menor, mas este é o alvo).
 
@@ -87,24 +88,35 @@ Verificar:
 
 ## 4. Perfis de modelo
 
+Não existe `formiga agent --profile`: o perfil vem do **nome do modelo**
+(auto-seleção por substring) ou de uma força explícita (`[profile] model_hint`
+/ `FORMIGA_PROFILE_MODEL_HINT`, `[profile] active`, `cron add --profile`).
+
 ```bash
-formiga agent "pergunta curta" --profile gemma4-e4b
-formiga agent "pergunta curta" --profile nemotron-3.5-bolt-e4b
+# Auto-seleção: o nome do modelo casa com o perfil builtin
+formiga agent "pergunta curta" --model gemma4:e4b          # → gemma4-e4b
+formiga agent "pergunta curta" --model gemma4:e2b          # → gemma4-e2b
+
+# Força explícita (a tag do Ollama `nemotron-3.5-bolt` não casa sozinha)
+FORMIGA_PROFILE_MODEL_HINT=nemotron-3.5-bolt-e4b \
+  formiga agent "pergunta curta" --model nemotron-3.5-bolt
 ```
 
 Verificar:
 
 - [ ] A barra de status da TUI exibe o perfil selecionado (`perfil X`).
-- [ ] A auto-seleção por nome funciona (`model_hint = "gemma4"` → `gemma4-e4b`).
+- [ ] A auto-seleção por nome funciona (`gemma4:e4b` → `gemma4-e4b`).
 - [ ] O perfil `gemma4-e4b` usa `thinking = false`; o `nemotron-3.5-bolt-e4b`
-      usa `thinking = true`.
+      usa `thinking = true` (confira com `/budget` ou `events.jsonl`).
+- [ ] `model_hint`/`active` com nome de perfil inexistente não quebra a sessão
+      (nenhum perfil aplicado).
 
 ## 5. Local: Gemma 4 E4B via llama-server (documentado; executar manualmente)
 
 Receita (llama-server deve estar compilado em `~/llama.cpp/build/bin/`):
 
 ```bash
-# 1. Baixe o GGUF (ex.: Gemma-4-E4B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf)
+# 1. Baixe um GGUF da Gemma 4 E4B (ex.: Gemma-4-E4B-Q4_K_M.gguf)
 # 2. Suba o servidor:
 ~/llama.cpp/build/bin/llama-server -m Gemma-4-E4B-*.gguf \
   --alias gemma4 -c 32768 --jinja --reasoning off
@@ -113,12 +125,12 @@ Receita (llama-server deve estar compilado em `~/llama.cpp/build/bin/`):
 formiga agent "resuma o arquivo formiga.toml" \
   --llm-backend llamacpp \
   --llamacpp-url http://127.0.0.1:8080 \
-  --model gemma4
+  --model gemma4:e4b
 ```
 
 Verificar:
 
-- [ ] O perfil `gemma4-e4b` é auto-selecionado pelo nome `gemma4`.
+- [ ] O perfil `gemma4-e4b` é auto-selecionado pelo nome `gemma4:e4b`.
 - [ ] A resposta é gerada localmente (sem chave de API remota).
 - [ ] A barra de status exibe `ctx` compatível com a janela de 32K do perfil.
 
@@ -206,12 +218,13 @@ A memória tem recall (busca FTS5 em sessões passadas), memória curada
 # 1. Rode uma sessão que aprenda algo
 formiga agent "anote que o usuário gosta de chá"
 
-# 2. Veja sugestões pendentes e aprova
-formiga memory pending
-formiga memory save
+# 2. Veja sugestões pendentes e aprove (dentro da sessão, não há subcomando
+#    `formiga memory` na CLI)
+# pergunta> /memory pending
+# pergunta> /memory save
 
-# 3. Busque em sessões passadas (via recall dentro do agent)
-formiga agent "o que o usuário gosta de beber?"
+# 3. Busque em sessões passadas
+# pergunta> /recall o que o usuário gosta de beber?
 
 # 4. Inspecione
 cat ~/.formiga/memory/MEMORY.md
@@ -219,10 +232,10 @@ cat ~/.formiga/memory/MEMORY.md
 
 Verificar:
 
-- [ ] `formiga memory pending` lista sugestões stageadas pelo nudge.
-- [ ] `formiga memory save` grava o fato em `~/.formiga/memory/MEMORY.md`.
-- [ ] `formiga memory show` exibe perfil e memória curada.
-- [ ] O modelo usa `recall` para achar fatos de sessão antiga.
+- [ ] `/memory pending` lista sugestões stageadas pelo nudge.
+- [ ] `/memory save` grava o fato em `~/.formiga/memory/MEMORY.md`.
+- [ ] `/memory show` exibe perfil e memória curada.
+- [ ] `/recall` acha fatos de sessão antiga (e o modelo usa a tool `recall`).
 - [ ] `USER.md` aparece como seção no prompt (ver `events.jsonl`).
 - [ ] Nenhuma credencial aparece em `MEMORY.md`.
 
@@ -282,8 +295,8 @@ Verificar:
 - [ ] `Ctrl+C`/`Esc` cooperativo; estado final correto.
 - [ ] Gateway: `start`/`status`/`stop` funcionam; reanexo mostra resposta.
 - [ ] Cron: `add`/`list`/`run`/`disable`/`rm` funcionam; `jobs.json` persiste.
-- [ ] Memory: `memory pending`/`save`/`show` funcionam; `recall` acha fato de
-      sessão antiga; `MEMORY.md`/`USER.md` em `~/.formiga/memory/`.
+- [ ] Memory: `/memory pending`/`save`/`show` funcionam; `recall`/`/recall`
+      acha fato de sessão antiga; `MEMORY.md`/`USER.md` em `~/.formiga/memory/`.
 - [ ] Skills: `skills list` e `/skills` listam; `/nome` expande; `skill_manage`
       só grava após `/skills approve`; projeto sem trust não carrega skill.
 - [ ] `--print` e `--local` rodam sem gateway.

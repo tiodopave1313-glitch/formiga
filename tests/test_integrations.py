@@ -22,7 +22,7 @@ class TestOllama:
             body = json.loads(request.content)
             assert body["format"] == "json"
             assert body["stream"] is False
-            assert body["model"] == "nemotron-3.5-bolt"
+            assert body["model"] == "gemma4:e4b"
             if not payload_ok:
                 return httpx.Response(200, json={"nope": True})
             return httpx.Response(

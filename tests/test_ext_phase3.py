@@ -251,3 +251,28 @@ def test_cli_tui_status_exibe_perfil(tmp_path, monkeypatch):
     # O controller expõe o config para a TUI ler active_profile no status
     controller = AgentController(cfg, session, loop=loop)
     assert controller.config.active_profile == "gemma4-e4b"
+
+
+def test_active_profile_forca_perfil_quando_modelo_nao_casa(tmp_path, monkeypatch):
+    """`active_profile` (TOML `active` / cron `--profile`) força o perfil.
+
+    A tag do Ollama `nemotron-3.5-bolt` não contém o nome do perfil builtin,
+    então a auto-seleção por substring falha; a força explícita resolve.
+    """
+    from formiga.agent import factory
+
+    cfg = Config(
+        agent_workdir=str(tmp_path),
+        model="nemotron-3.5-bolt",
+        active_profile="nemotron-3.5-bolt-e4b",
+    )
+    session = Session(tmp_path / "sessoes")
+
+    class FakeChat:
+        pass
+
+    monkeypatch.setattr(factory, "build_chat_client", lambda config: FakeChat())
+    factory.build_agent(cfg, session)
+
+    assert cfg.active_profile == "nemotron-3.5-bolt-e4b"
+    assert cfg.llm_thinking is True  # perfil Bolt mantém thinking ligado
