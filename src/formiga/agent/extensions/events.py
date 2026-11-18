@@ -18,5 +18,10 @@ OBSERVATION_EVENTS = frozenset(
         "job_end",
         # Fase 8 (memória): fim de sessão — dispara nudge de memória curada.
         "session_end",
+        # Fase 9 (skills): conteúdo declarativo expandido por comando.
+        "skill_expanded",
+        "skill_manage_approved",
+        "task_start",
+        "task_end",
     }
 )

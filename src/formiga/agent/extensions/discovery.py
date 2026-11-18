@@ -71,7 +71,7 @@ def discover_extensions(
     home = (home or Path.home()).resolve()
     candidates: list[ExtensionCandidate] = []
 
-    builtin_names = {"core", "web", "deepsearch", "memory"}
+    builtin_names = {"core", "web", "deepsearch", "memory", "skills"}
     enabled = tuple(getattr(config, "extensions_enabled", ("core", "web", "deepsearch")))
     unknown = set(enabled) - builtin_names
     if unknown:

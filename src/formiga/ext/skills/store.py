@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -61,7 +62,7 @@ class SkillStore:
             self.skills.append(skill)
 
     def get(self, name: str) -> Skill | None:
-        normalized = name.strip().lower()
+        normalized = name.strip()
         return next((skill for skill in self.skills if skill.name == normalized), None)
 
     def names(self) -> list[str]:
@@ -70,6 +71,10 @@ class SkillStore:
     def write(self, name: str, content: str, source: str = "global") -> Path:
         """Grava SKILL.md depois de validação; aprovação é responsabilidade do harness."""
         normalized = validar_nome_para_write(name)
+        if source not in {"global", "project"}:
+            raise SkillError("source deve ser global ou project")
+        if source == "project" and not self.trusted:
+            raise SkillError("projeto não está na allowlist de trust")
         if _SECRET_RE.search(content):
             raise SkillError("conteúdo contém possível credencial")
         directory = (
@@ -79,17 +84,25 @@ class SkillStore:
         )
         directory.mkdir(parents=True, exist_ok=True)
         path = directory / "SKILL.md"
-        path.write_text(content.rstrip() + "\n", encoding="utf-8")
-        # Valida o arquivo recém-criado; em falha remove para evitar persistência inválida.
+        temporary = directory / f".SKILL-{uuid.uuid4().hex}.tmp"
         try:
-            parse_skill(path, source=source)
+            temporary.write_text(content.rstrip() + "\n", encoding="utf-8")
+            parse_skill(temporary, source=source)
+            temporary.replace(path)
         except SkillError:
-            path.unlink(missing_ok=True)
+            temporary.unlink(missing_ok=True)
+            raise
+        except OSError:
+            temporary.unlink(missing_ok=True)
             raise
         return path
 
     def delete(self, name: str, source: str = "global") -> bool:
         normalized = validar_nome_para_write(name)
+        if source not in {"global", "project"}:
+            raise SkillError("source deve ser global ou project")
+        if source == "project" and not self.trusted:
+            raise SkillError("projeto não está na allowlist de trust")
         directory = (
             self.global_dir / normalized
             if source == "global"
