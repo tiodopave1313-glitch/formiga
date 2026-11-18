@@ -299,8 +299,15 @@ class Gateway:
         return actual_port
 
     async def stop(self) -> None:
-        """Para o servidor, o scheduler de cron e remove o pidfile."""
+        """Para o servidor, o scheduler de cron e remove o pidfile.
+
+        Encerra todas as sessões ativas emitindo `session_end` (memória,
+        fase 8) antes de fechar o daemon.
+        """
         self._stop.set()
+        for sess in list(self.sessions.values()):
+            with contextlib.suppress(Exception):
+                sess.loop.end_session()
         if self._scheduler_task:
             self._scheduler_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):

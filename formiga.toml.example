@@ -82,3 +82,11 @@ workdir = "."
 catchup = "skip"
 # Fuso dos schedules; None = fuso do sistema.
 tz = "America/Sao_Paulo"
+
+[memory]
+# Índice FTS5 ativo / recall disponível.
+recall = true
+# Nudge de memória curada no fim da sessão (e a cada 10 turnos).
+nudge = true
+# Teto rígido de tokens injetados no prompt (memória + perfil).
+max_tokens = 1600

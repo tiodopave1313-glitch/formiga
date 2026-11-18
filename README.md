@@ -131,6 +131,39 @@ formiga cron rm <id>
 - Config: `[cron] catchup = "skip"`, `tz = "America/Sao_Paulo"`;
   env `FORMIGA_CRON_CATCHUP` / `FORMIGA_CRON_TZ`.
 
+### `formiga memory` — memória estilo Hermes (Fase 8)
+
+A memória tem três camadas: **recall** (busca FTS5 em sessões passadas),
+**memória curada** (`MEMORY.md` com nudge + aprovação humana) e **perfil**
+(`USER.md` injetado no prompt). Tudo fica em `~/.formiga/memory/` e o índice
+em `~/.formiga/index.db`. É uma extensão builtin (`memory`) ligada por
+default.
+
+```bash
+# Busque o que a gente falou sobre X em sessões passadas
+formiga agent "o que a gente decidiu sobre o deploy?"  # o modelo usa /recall
+
+# Veja o que está na memória curada e no perfil
+formiga memory show
+
+# Veja sugestões aguardando aprovação e as aplique
+formiga memory pending
+formiga memory save
+```
+
+- **Recall**: `recall(query, limit?)` encontra trechos de `messages.json` e
+  `transcript.md` de sessões antigas (índice incremental por mtime, FTS5).
+- **Nudge**: ao fim da sessão (e a cada 10 turnos), o harness sugere salvar
+  o que aprendeu; a gravação só ocorre pelo comando humano `/memory save`
+  (o modelo nunca grava sozinho — staging em `pending.json`).
+- **Perfil**: `USER.md` vira seção do system prompt (≤ 600 tokens).
+- **Guardrails**: memória é dado não confiável (cabeçalho de aviso), teto
+  rígido (≤ 1 000 tokens memória + 600 tokens perfil, truncamento),
+  credenciais recusadas, arquivo corrompido gera aviso e não derruba.
+- Config: `[memory] recall = true`, `nudge = true`, `max_tokens = 1600`;
+  env `FORMIGA_MEMORY_RECALL` / `FORMIGA_MEMORY_NUDGE` /
+  `FORMIGA_MEMORY_MAX_TOKENS`.
+
 ## Opções de `research`
 
 | Opção | Finalidade |

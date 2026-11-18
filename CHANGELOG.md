@@ -67,6 +67,32 @@ e este projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 - `turn_done` garantido mesmo quando o loop de um turno falha.
 - 378 testes verdes (incluindo 11 de aceitação do gateway) + `ruff check` limpo.
 
+## [0.4.0a1] — 2026-11-17
+
+### Fase 8 — Memória estilo Hermes (PRD §13)
+
+- `ext/memory/`: índice FTS5 (`~/.formiga/index.db`) sobre `messages.json` e
+  `transcript.md` de sessões passadas; ferramenta `recall(query, limit?)`
+  e comando `/recall <query>` (busca incrementada por mtime).
+- Memória curada: `~/.formiga/memory/MEMORY.md` (fatos duráveis) e
+  `USER.md` (perfil), injetadas como seções do system prompt com cabeçalho
+  de "dado não confiável" (guardrail §13.4); tetos rígidos (≤ 1 000 tokens
+  memória + 600 tokens perfil, truncamento determinístico).
+- Nudge: `session_end` (evento novo) e a cada 10 turnos sugerem salvar o
+  aprendizado; `memory_save(entries)` apenas *stageia* em `pending.json` —
+  a gravação ocorre só pelo comando humano `/memory save` (modelo não grava
+  sozinho). Comandos `/memory show | pending | save | clear | edit`.
+- `session_end` adicionado a `OBSERVATION_EVENTS`; `AgentLoop.end_session()`
+  emitido nos pontos de saída da CLI/TUI e ao parar o gateway.
+- Extensão builtin `memory` habilitada por default
+  (`DEFAULT_ENABLED_EXTENSIONS`); config `[memory] recall/nudge/max_tokens`;
+  env `FORMIGA_MEMORY_RECALL` / `FORMIGA_MEMORY_NUDGE` /
+  `FORMIGA_MEMORY_MAX_TOKENS`.
+- **Correção**: seções `[cron]` e `[memory]` agora são lidas do
+  `formiga.toml` (antes causavam "seções desconhecidas").
+- 404 testes verdes (incluindo 13 de aceitação da memória) + `ruff check`
+  limpo.
+
 ## [0.3.0a1] — 2026-11-17
 
 ### Fase 7 — Tarefas agendadas (cron) (PRD §12)
@@ -89,8 +115,6 @@ e este projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
   comandos `/` anexados ao gateway despacham via ação `command` →
   `command_result` (WS).
 - 391 testes verdes (incluindo 13 de aceitação do cron) + `ruff check` limpo.
-
-**Fase 6 — Gateway local + retomada (PRD §11)** (movida para 0.2.0a1)
 
 ### [0.1.0] — v1 inicial
 

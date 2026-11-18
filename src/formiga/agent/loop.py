@@ -133,6 +133,9 @@ class AgentLoop:
         # Bloco "## Agent" aberto no transcript (fecha antes de tools).
         self._agent_section = False
 
+        # `session_end` emitido no máximo uma vez por instância do loop.
+        self._session_ended = False
+
     # ------------------------------------------------------------------ #
     # Cancelamento cooperativo
 
@@ -408,6 +411,23 @@ class AgentLoop:
             self.registry.observe("turn_end", {"turns": self.budget.turns_used})
             self._emit("run_final", {"text": final, "streamed": True})
             return final
+
+    def end_session(self) -> None:
+        """Finaliza a sessão: emite `session_end` (observação) uma única vez.
+
+        Chamado pelos pontos de saída da sessão (CLI/TUI/gateway). É
+        idempotente: chamadas subsequentes não re-emitem o evento.
+        """
+        if getattr(self, "_session_ended", False):
+            return
+        self._session_ended = True
+        payload = {
+            "session": self.session.session_id,
+            "turns": self.budget.turns_used,
+            "llm_calls": self.budget.llm_calls_used,
+        }
+        self.session.append_event("session_end", payload)
+        self.registry.observe("session_end", payload)
 
     # ------------------------------------------------------------------ #
 

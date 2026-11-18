@@ -427,6 +427,7 @@ def _run_print(config: Config, session: Session, args) -> int:
     loop.on_event = on_event
     answer = loop.run(args.question)
     print(answer)
+    loop.end_session()
     return EXIT_INTERRUPTED if interrupted["flag"] else EXIT_OK
 
 
@@ -447,6 +448,10 @@ def _run_tui(config: Config, session: Session, args) -> int:
         app.run()
     except KeyboardInterrupt:
         return EXIT_INTERRUPTED
+    finally:
+        loop = app.loop if hasattr(app, "loop") else None
+        if loop is not None:
+            loop.end_session()
     return EXIT_OK
 
 
@@ -562,9 +567,13 @@ def _run_interactive(config: Config, session: Session, args) -> int:
             try:
                 q = input("\npergunta> ")
             except EOFError:
+                if loop is not None:
+                    loop.end_session()
                 print(f"\nSaindo. Sessão salva em {transcript_path}")
                 return EXIT_OK
             except KeyboardInterrupt:
+                if loop is not None:
+                    loop.end_session()
                 print()
                 return EXIT_OK
 
@@ -595,6 +604,8 @@ def _run_interactive(config: Config, session: Session, args) -> int:
             except KeyboardInterrupt:
                 continue  # loop trata internamente; volta ao prompt
 
+        if loop is not None:
+            loop.end_session()
         return EXIT_OK
 
     # ---------- modo gateway (assíncrono, tudo em um único loop) ----------
