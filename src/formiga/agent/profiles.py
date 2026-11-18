@@ -1,6 +1,6 @@
 """Perfis de modelo (seção 9.6 do PRD v2).
 
-Perfis builtin (`gemma4-e4b`, `nemotron-3.5-bolt-e4b`) fornecem defaults
+Perfis builtin (`gemma4-e2b`, `gemma4-e4b`, `nemotron-3.5-bolt-e4b`) fornecem defaults
 conservadores para janela de contexto, thinking, temperatura, etc. Perfis
 do usuário em `[profiles.*]` mesclam sobre os builtin. A seleção é por
 substring do nome do modelo ou por `[profile] model_hint`. CLI/env/arquivo
@@ -28,6 +28,15 @@ class Profile:
 # Perfis builtin (seção 9.6 do PRD). Valores None = não definido pelo perfil
 # (mantém o default do Formiga ou o que estiver em config).
 BUILTIN_PROFILES: dict[str, Profile] = {
+    "gemma4-e2b": Profile(
+        name="gemma4-e2b",
+        context_tokens=32768,
+        thinking=True,  # GGUF "IT ... Thinking": o raciocínio fica ligado
+        temperature=1.0,
+        top_p=0.95,
+        max_tokens_per_turn=8192,  # thinking come orçamento de geração
+        tool_schema_tokens=1600,
+    ),
     "gemma4-e4b": Profile(
         name="gemma4-e4b",
         context_tokens=32768,
@@ -117,3 +126,11 @@ def apply_profile(config, profile: Profile) -> None:
         # Só aplica se o valor atual for o default do Formiga
         if valor_atual == default_val:
             setattr(config, attr, valor_perfil)
+
+    # O cliente llamacpp lê `llamacpp_thinking`, não `llm_thinking`. Sem esse
+    # espelho, um perfil "sem thinking" ainda enviaria enable_thinking=true.
+    if (
+        profile.thinking is not None
+        and config.llamacpp_thinking == defaults["llm_thinking"]
+    ):
+        config.llamacpp_thinking = profile.thinking

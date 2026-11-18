@@ -230,6 +230,7 @@ def load_config_values(path: Path) -> dict[str, object]:
 
     values: dict[str, object] = {}
     extension_settings: dict[str, dict[str, object]] = {}
+    profiles: dict[str, dict[str, object]] = {}
     for section, mapping in _SECTIONS.items():
         block = data.get(section)
         if block is None:
@@ -257,12 +258,14 @@ def load_config_values(path: Path) -> dict[str, object]:
         for profile_name, settings in profile_sections.items():
             if not isinstance(settings, dict):
                 raise ConfigError(f"Seção [profiles.{profile_name}] inválida em {path}.")
-            extension_settings[profile_name] = dict(settings)
+            profiles[profile_name] = dict(settings)
     unknown = set(data) - set(_SECTIONS) - {"ext", "profiles"}
     if unknown:
         raise ConfigError(f"Seções desconhecidas em {path}: {sorted(unknown)}.")
     if extension_settings:
         values["extension_settings"] = extension_settings
+    if profiles:
+        values["profiles"] = profiles
     if "openai_api_key" in values and os.name == "posix":
         _check_api_key_permissions(path)
     return values

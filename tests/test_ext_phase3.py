@@ -184,6 +184,17 @@ def test_perfil_builtin_gemma4():
     assert perfil.context_tokens == 32768
 
 
+def test_perfil_builtin_gemma4_e2b():
+    """GGUF Gemma 4 E2B (2B efetivos) casa com seu próprio perfil."""
+    perfil = select_profile(
+        "gemma-4-E2B-it-The-DECKARD-HERETIC-UNCENSORED-Thinking.Q4_K_M.gguf"
+    )
+    assert perfil is not None
+    assert perfil.name == "gemma4-e2b"
+    assert perfil.thinking is True
+    assert perfil.max_tokens_per_turn == 8192
+
+
 def test_perfil_builtin_nemotron():
     """select_profile encontra nemotron-3.5-bolt-e4b por substring."""
     perfil = select_profile("nemotron-3.5-bolt-e4b", model_hint=None)
@@ -206,7 +217,8 @@ def test_select_profile_sem_match_retorna_none():
 
 
 def test_builtin_profiles_estao_disponiveis():
-    """BUILTIN_PROFILES contém os dois perfis do PRD."""
+    """BUILTIN_PROFILES contém os perfis do PRD e o Gemma 4 E2B."""
+    assert "gemma4-e2b" in BUILTIN_PROFILES
     assert "gemma4-e4b" in BUILTIN_PROFILES
     assert "nemotron-3.5-bolt-e4b" in BUILTIN_PROFILES
 
@@ -234,6 +246,7 @@ def test_cli_tui_status_exibe_perfil(tmp_path, monkeypatch):
     # O perfil gemma4-e4b deve ter sido selecionado e aplicado
     assert cfg.active_profile == "gemma4-e4b"
     assert cfg.llm_thinking is False  # perfil gemma4 desliga thinking
+    assert cfg.llamacpp_thinking is False  # e também no backend llamacpp
 
     # O controller expõe o config para a TUI ler active_profile no status
     controller = AgentController(cfg, session, loop=loop)

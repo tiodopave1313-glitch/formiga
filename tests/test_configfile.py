@@ -191,3 +191,29 @@ class TestDiscovery:
         monkeypatch.setenv("HOME", str(tmp_path / "home"))
         config = Config.from_sources(file_values=load_file_values())
         assert config.model == "from-file"
+
+
+def test_profiles_via_toml_chegam_em_config_profiles(tmp_path):
+    """`[profiles.*]` é perfil de modelo, não config de extensão."""
+    from formiga.agent.profiles import Profile
+
+    path = write_config(
+        tmp_path,
+        """
+[profiles.gemma4-e2b]
+context_tokens = 32768
+thinking = false
+temperature = 1.0
+top_p = 0.95
+max_tokens_per_turn = 4096
+tool_schema_tokens = 1600
+""",
+    )
+    values = load_config_values(path)
+    assert values["profiles"]["gemma4-e2b"]["thinking"] is False
+    assert "gemma4-e2b" not in values.get("extension_settings", {})
+
+    config = Config.from_sources(file_values=values)
+    perfil = Profile(name="gemma4-e2b", **config.profiles["gemma4-e2b"])
+    assert perfil.context_tokens == 32768
+    assert perfil.thinking is False

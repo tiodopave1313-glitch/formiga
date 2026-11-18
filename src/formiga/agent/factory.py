@@ -34,7 +34,7 @@ def build_agent(
     # Perfil de modelo (seção 9.6 do PRD): aplica defaults do perfil apenas
     # em campos ainda em default do Formiga; CLI/env/arquivo sobrepõem.
     user_profiles = {
-        nome: Profile(**settings)
+        nome: Profile(**{**settings, "name": nome})
         for nome, settings in config.profiles.items()
     }
     perfil = select_profile(
