@@ -281,6 +281,14 @@ workdir = "."
 [profile]
 # active = "nemotron-3.5-bolt-e4b"   # sobrescreve a auto-seleção
 
+[profiles.gemma4-e2b]
+context_tokens = 32768                 # janela útil, não a anunciada
+thinking = true                        # GGUF "IT ... Thinking": raciocínio ligado
+temperature = 1.0
+top_p = 0.95
+max_tokens_per_turn = 8192             # thinking consome orçamento de geração
+tool_schema_tokens = 1600
+
 [profiles.gemma4-e4b]
 context_tokens = 32768                 # janela útil, não a anunciada
 thinking = false
@@ -441,6 +449,13 @@ remota: `nvidia/nemotron-3.5-bolt-e4b`. Detalhes que afetam o Formiga:
   bruta falha aparece no evento `llm_call` de `events.jsonl`. Blocos
   `ANNELing ... ANNELs` inline no `content` são descartados antes do parse.
 
+No agente, `reasoning_content` é mantido fora do histórico e do texto
+mostrado ao usuário. Alguns GGUFs de thinking ignoram
+`enable_thinking: false` — nesse caso o modelo raciocina mesmo assim; é
+esperado e não é erro. Se o raciocínio esgotar o teto antes de produzir
+texto, o agente responde com uma abstenção explícita e registra
+`llm_truncated` em `events.jsonl`, em vez de devolver `"(sem resposta)"`.
+
 ## Smoke test manual
 
 Com Ollama e SearXNG disponíveis:
@@ -522,7 +537,7 @@ formiga/
 │   └── agent/             # harness agêntico (Formiga Agent, Fases 1–5)
 │       ├── loop.py        # loop de turnos (orçamento, eviction, âncora)
 │       ├── factory.py     # build_agent: discovery → registry → loop
-│       ├── profiles.py    # perfis de modelo (gemma4-e4b, nemotron-3.5-bolt-e4b)
+│       ├── profiles.py    # perfis de modelo (gemma4-e2b, gemma4-e4b, nemotron-3.5-bolt-e4b)
 │       ├── guardrails.py  # AgentBudget, ToolBudgets, AntiLoop
 │       ├── session.py     # sessão em disco (messages, events, transcript)
 │       ├── ui.py          # cores, limpeza de tela e painel da CLI

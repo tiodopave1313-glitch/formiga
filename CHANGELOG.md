@@ -5,6 +5,39 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [0.5.0a2] — 2026-11-18
+
+### Correções — backend llama.cpp
+
+- `formiga agent --llm-backend llamacpp` falhava sempre com
+  `httpx.ReadError: [Errno 9] Bad file descriptor`: `raise_for_status()`,
+  `.json()` e o consumo do SSE ocorriam depois de fechar o `httpx.Client`.
+  O processamento da resposta agora acontece dentro do `with`, como já
+  faziam os backends `ollama` e `openai`.
+- `reasoning_content` de modelos thinking (Gemma 4 E2B IT Thinking, Nemotron)
+  agora é capturado separadamente de `content`, tanto no stream quanto na
+  resposta única. O raciocínio não é entregue ao callback de streaming nem
+  entra no histórico de mensagens — não consome contexto nas chamadas
+  seguintes.
+- Quando o raciocínio consome todo o teto de geração sem produzir texto, o
+  agente responde com abstenção explícita e registra o evento `llm_truncated`
+  (`reasoning_chars`, `turns`) em vez de devolver `"(sem resposta)"` e marcar
+  a tarefa como concluída.
+- Teste de streaming do `llamacpp` passou a usar um servidor HTTP real em
+  porta efêmera: `httpx.MockTransport` não tem socket e mascarava o bug do
+  client fechado.
+
+### Perfis de modelo
+
+- Seções `[profiles.*]` do TOML eram carregadas como configuração de
+  extensão e chegavam vazias ao `build_agent`; agora vão para
+  `Config.profiles`, e o `name` do `Profile` é derivado da chave da seção.
+- Novo perfil builtin `gemma4-e2b` para o GGUF Gemma 4 E2B IT Thinking:
+  thinking ligado e `max_tokens_per_turn = 8192` para acomodar o raciocínio.
+- O `thinking` do perfil agora é espelhado em `llamacpp_thinking` (campo
+  efetivamente lido pelo backend); uma flag explícita na CLI continua
+  sobrepondo o perfil.
+
 ## [0.5.0a1] — 2026-11-18
 
 ### CLI interativa — cores, limpeza de tela e painel de abertura
