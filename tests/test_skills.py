@@ -305,25 +305,17 @@ def test_skill_manage_delete_exige_aprovacao(skills_env):
     assert not path.exists()
 
 
-def test_nudge_task_end_so_com_tarefa_bem_sucedida(skills_env):
+def test_task_end_nao_emite_nudge_de_skills(skills_env):
+    """Nudge pós-tarefa removido: nenhuma notificação é disparada."""
     _home, _project, registry, _session = skills_env
     notificacoes: list[tuple[str, dict]] = []
     registry._event_sink = lambda event, data: notificacoes.append((event, data))
 
-    registry.observe("task_end", {"successful": False, "successful_tools": 3})
+    registry.observe("task_end", {"successful": True, "successful_tools": 3})
     assert not any(event == "notification" for event, _ in notificacoes)
 
-    registry.observe("task_end", {"successful": True, "successful_tools": 0})
-    assert not any(event == "notification" for event, _ in notificacoes)
 
-    registry.observe("task_end", {"successful": True, "successful_tools": 2})
-    nudges = [
-        data["text"] for event, data in notificacoes if event == "notification"
-    ]
-    assert any("skill_manage" in text for text in nudges)
-
-
-def test_loop_emite_task_end_e_dispara_nudge(skills_env):
+def test_loop_emite_task_end_sem_nudge(skills_env):
     from formiga.agent.chat import ChatResponse
     from formiga.agent.loop import AgentLoop
     from formiga.agent.tools.files import LsTool
@@ -332,8 +324,8 @@ def test_loop_emite_task_end_e_dispara_nudge(skills_env):
     home, project, registry, session = skills_env
     _write_skill(home / ".formiga/skills/resumir/SKILL.md", "resumir")
     registry.register_tool(LsTool(project))
-    notificacoes: list[tuple[str, dict]] = []
-    registry._event_sink = lambda event, data: notificacoes.append((event, data))
+    eventos: list[tuple[str, dict]] = []
+    registry._event_sink = lambda event, data: eventos.append((event, data))
     chat = FakeChatClient(
         [
             ChatResponse(tool_calls=[tool_call("ls", '{"path": "."}')]),
@@ -349,8 +341,7 @@ def test_loop_emite_task_end_e_dispara_nudge(skills_env):
 
     loop.run("liste e conclua")
 
-    task_end = [data for event, data in notificacoes if event == "notification"]
-    assert any("skill_manage" in data["text"] for data in task_end)
+    assert not any(event == "notification" for event, _ in eventos)
 
 
 def test_cli_skills_list(tmp_path, monkeypatch, capsys):

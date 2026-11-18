@@ -300,13 +300,3 @@ def setup(pi: ExtensionAPI) -> None:
 
     pi.on("input", on_input)
     pi.register_tool(manager)
-
-    def on_task_end(data: dict) -> None:
-        if data.get("successful") and data.get("successful_tools", 0):
-            pi.ui.notify(
-                "Tarefa concluída com uso de ferramentas. Se o procedimento for "
-                "reutilizável, proponha uma skill com skill_manage(action='write'); "
-                "nada será gravado sem /skills approve <id>."
-            )
-
-    pi.on("task_end", on_task_end)
