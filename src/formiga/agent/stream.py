@@ -4,6 +4,10 @@ Usado pelos clientes `openai` e `llamacpp` (llama-server é OpenAI-compatível
 no formato). Acumula `delta.content` (entregue ao callback em tempo real) e
 monta tool_calls a partir dos fragments delta por `index`.
 
+`delta.reasoning_content` é acumulado à parte: modelos thinking podem gastar
+todo o teto de geração raciocinando e nunca emitir `content`. Sem essa
+distinção, o loop trataria o corte como uma resposta vazia normal.
+
 O callback pode levantar `AgentCancelled` — a exceção não é engolida aqui;
 propaga para o loop, que a interpreta como interrupção do usuário.
 """
@@ -26,6 +30,7 @@ def consume_sse_chat_stream(
     falhas de parse — coerente com o tratamento existente de cada cliente.
     """
     content_parts: list[str] = []
+    reasoning_parts: list[str] = []
     tool_calls_acc: dict[int, dict] = {}
     truncated = False
 
@@ -51,6 +56,9 @@ def consume_sse_chat_stream(
             content_parts.append(piece)
             if on_delta is not None:
                 on_delta(piece)
+        thinking = delta.get("reasoning_content")
+        if isinstance(thinking, str) and thinking:
+            reasoning_parts.append(thinking)
         for tc in delta.get("tool_calls") or []:
             index = tc.get("index", 0)
             acc = tool_calls_acc.setdefault(index, {"id": "", "name": "", "arguments": ""})
@@ -75,8 +83,10 @@ def consume_sse_chat_stream(
             for _, acc in sorted(tool_calls_acc.items())
         ]
     content = "".join(content_parts)
+    reasoning = "".join(reasoning_parts)
     return ChatResponse(
         content=content if content else None,
         tool_calls=tool_calls,
         truncated=truncated,
+        reasoning=reasoning if reasoning else None,
     )

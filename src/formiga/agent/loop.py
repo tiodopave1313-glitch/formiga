@@ -425,15 +425,35 @@ class AgentLoop:
                 continue
 
             # resposta final sem tool call
-            final = response.content or "(sem resposta)"
-            self._task_completed_successfully = True
+            if not response.content and response.reasoning and response.truncated:
+                # Modelo de raciocínio gastou o teto antes de produzir texto.
+                # Não disfarçar o corte de "(sem resposta)": limite explícito
+                # e abstenção comunicada, como manda o princípio do projeto.
+                final = (
+                    "Não consegui responder: o raciocínio do modelo consumiu "
+                    "todo o limite de geração antes de produzir texto. Tente "
+                    "novamente com o raciocínio desligado (--no-llm-thinking / "
+                    "--no-llamacpp-thinking) ou com um modelo mais direto."
+                )
+                self.session.append_event(
+                    "llm_truncated",
+                    {
+                        "reasoning_chars": len(response.reasoning),
+                        "turns": self.budget.turns_used,
+                    },
+                )
+            else:
+                final = response.content or "(sem resposta)"
+                self._task_completed_successfully = True
             self.messages.append({"role": "assistant", "content": final})
             self.session.save_messages(self.messages)
             self._pending_len = None  # turno confirmado: sem rollback
             self.session.append_event("turn_ended", {"turns": self.budget.turns_used})
             self._emit("budget", self._budget_snapshot())
             self.registry.observe("turn_end", {"turns": self.budget.turns_used})
-            self._emit("run_final", {"text": final, "streamed": True})
+            self._emit(
+                "run_final", {"text": final, "streamed": bool(response.content)}
+            )
             return final
 
     def end_session(self) -> None:

@@ -134,6 +134,9 @@ class LlamaCppClient:
         if max_tokens is not None:
             payload["max_tokens"] = max_tokens
         try:
+            # O client precisa permanecer aberto enquanto o stream é lido:
+            # fechá-lo aqui derruba o socket e o SSE falha com EBADF.
+            # Mesmo padrão de ollama.py / openai.py.
             with httpx.Client(
                 timeout=self._effective_timeout(), transport=self._transport
             ) as client:
@@ -144,14 +147,14 @@ class LlamaCppClient:
                         "POST", f"{self.url}/v1/chat/completions", json=payload
                     )
                     response = client.send(request, stream=True)
-            response.raise_for_status()
-            if on_delta is None:
-                data = response.json()
-            else:
-                try:
-                    return consume_sse_chat_stream(response, on_delta, LlamaCppError)
-                finally:
-                    response.close()
+                response.raise_for_status()
+                if on_delta is None:
+                    data = response.json()
+                else:
+                    try:
+                        return consume_sse_chat_stream(response, on_delta, LlamaCppError)
+                    finally:
+                        response.close()
         except httpx.HTTPError as exc:
             raise LlamaCppError(f"Falha ao chamar o llama-server: {exc}") from exc
         except ValueError as exc:
@@ -162,6 +165,9 @@ class LlamaCppClient:
         except (KeyError, IndexError, TypeError) as exc:
             raise LlamaCppError(f"Resposta do llama-server sem conteúdo: {data!r}") from exc
         content = message.get("content")
+        # Modelos de raciocínio (Gemma 4 IT Thinking, Nemotron) devolvem o
+        # pensamento em `reasoning_content`, separado de `content`.
+        reasoning = message.get("reasoning_content")
         tool_calls_raw = message.get("tool_calls")
         truncated = choice.get("finish_reason") == "length"
         tool_calls: list[ToolCall] | None = None
@@ -178,4 +184,5 @@ class LlamaCppClient:
             content=content if isinstance(content, str) else None,
             tool_calls=tool_calls,
             truncated=truncated,
+            reasoning=reasoning if isinstance(reasoning, str) else None,
         )

@@ -48,6 +48,10 @@ class ChatResponse:
     tool_calls: list[ToolCall] | None = None  # chamada(s) de ferramenta
     truncated: bool = False         # terminou por limite de geração
     deltas: list[str] | None = None  # pedaços roteirizados (fakes de teste)
+    # Raciocínio separado (`reasoning_content`) de modelos thinking. Não é
+    # entregue ao usuário nem entra no histórico: serve para distinguir
+    # "resposta vazia" de "raciocínio comeu o teto de geração".
+    reasoning: str | None = None
 
 
 class ChatClient(Protocol):

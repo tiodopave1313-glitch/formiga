@@ -1,8 +1,14 @@
-"""Testes de streaming do chat (offline, MockTransport com SSE/NDJSON fake)."""
+"""Testes de streaming do chat (offline, MockTransport com SSE/NDJSON fake).
+
+Um teste usa servidor HTTP real: `httpx.MockTransport` não possui socket e
+por isso não detecta client fechado antes do consumo do SSE.
+"""
 
 from __future__ import annotations
 
+import http.server
 import json
+import threading
 
 import httpx
 import pytest
@@ -115,6 +121,82 @@ def test_llamacpp_chat_stream():
     response = client.chat([{"role": "user", "content": "oi"}], on_delta=received.append)
     assert received == ["res", "posta"]
     assert response.content == "resposta"
+
+
+def test_llamacpp_chat_stream_captura_reasoning_sem_entregar_ao_usuario():
+    """`reasoning_content` é separado do texto e não vaza para o callback."""
+    body = sse_body(
+        [{"reasoning_content": "pensando..."}, {"content": "OK"}], finish="stop"
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=body, headers={"content-type": "text/event-stream"})
+
+    config = Config(llamacpp_url="http://127.0.0.1:8080")
+    client = LlamaCppClient(config, transport=httpx.MockTransport(handler))
+    received: list[str] = []
+    response = client.chat([{"role": "user", "content": "oi"}], on_delta=received.append)
+    assert received == ["OK"]
+    assert response.content == "OK"
+    assert response.reasoning == "pensando..."
+
+
+def test_llamacpp_chat_stream_sem_texto_e_truncado_mantem_reasoning():
+    """Modelo thinking pode gastar o teto só em raciocínio: sinalizar, não sumir."""
+    body = sse_body([{"reasoning_content": "pensando..."}], finish="length")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=body, headers={"content-type": "text/event-stream"})
+
+    config = Config(llamacpp_url="http://127.0.0.1:8080")
+    client = LlamaCppClient(config, transport=httpx.MockTransport(handler))
+    response = client.chat([{"role": "user", "content": "oi"}], on_delta=lambda _: None)
+    assert response.content is None
+    assert response.truncated is True
+    assert response.reasoning == "pensando..."
+
+
+class _SSEHandler(http.server.BaseHTTPRequestHandler):
+    """Servidor SSE real para expor o ciclo de vida do httpx.Client."""
+
+    def do_POST(self) -> None:
+        size = int(self.headers.get("Content-Length", "0"))
+        self.rfile.read(size)
+        body = sse_body([{"content": "real "}, {"content": "http"}], finish="stop")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Connection", "close")
+        self.end_headers()
+        self.wfile.write(body)
+        self.wfile.flush()
+
+    def log_message(self, *args) -> None:  # noqa: ANN002 - silencia stderr
+        pass
+
+
+def test_llamacpp_chat_stream_com_client_real():
+    """Regressão: o client deve ficar aberto até o SSE ser totalmente lido.
+
+    Com `httpx.MockTransport` este teste passava mesmo com o client fechado
+    antes da leitura — o bug só aparecia contra um servidor HTTP de verdade.
+    """
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _SSEHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        config = Config(llamacpp_url=f"http://127.0.0.1:{server.server_port}")
+        client = LlamaCppClient(config)
+        received: list[str] = []
+        response = client.chat(
+            [{"role": "user", "content": "oi"}], on_delta=received.append
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+    assert received == ["real ", "http"]
+    assert response.content == "real http"
 
 
 def test_ollama_chat_stream_ndjson():

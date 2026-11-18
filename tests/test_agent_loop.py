@@ -198,3 +198,16 @@ def test_orcamentos_reiniciados_por_mensagem(tmp_path):
     r2 = loop2.run("mensagem 2")
     assert "Resposta 2." in r2
     assert "esgotado" not in r2.lower()
+
+
+def test_raciocinio_que_estoura_teto_nao_vira_sem_resposta(tmp_path):
+    """Corte por thinking é abstenção explícita, não "(sem resposta)"."""
+    loop, chat = _make_loop(
+        tmp_path,
+        [ChatResponse(content=None, truncated=True, reasoning="pensando muito...")],
+    )
+    resposta = loop.run("pergunta qualquer")
+    assert "raciocínio" in resposta
+    assert "limite de geração" in resposta
+    assert resposta != "(sem resposta)"
+    assert len(chat.calls) == 1
