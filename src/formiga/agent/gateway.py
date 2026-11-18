@@ -41,6 +41,7 @@ from formiga.agent.cron import (
 )
 from formiga.agent.factory import build_agent
 from formiga.agent.session import Session
+from formiga.agent.ui import estado_sessao
 from formiga.config import Config, ConfigError
 from formiga.configfile import global_config_path
 
@@ -383,6 +384,7 @@ class Gateway:
                         "action": "attached",
                         "session": sid,
                         "snapshot": self._snapshot(sid),
+                        "state": self._estado(sid),
                     },
                 )
                 self._reset_idle()
@@ -408,6 +410,7 @@ class Gateway:
                     "action": "attached",
                     "session": sid,
                     "snapshot": self._snapshot(sid),
+                    "state": self._estado(sid),
                 },
             )
             self._reset_idle()
@@ -726,6 +729,13 @@ class Gateway:
             "evicted": b.get("evicted", 0),
             "pending": len(sess._pending),
         }
+
+    def _estado(self, session_id: str) -> dict:
+        """Estado estruturado para o painel da CLI (dados, não texto)."""
+        sess = self.sessions.get(session_id)
+        if not sess:
+            return {}
+        return estado_sessao(sess.loop.registry, sess.session)
 
     def _new_session_id(self) -> str:
         import uuid

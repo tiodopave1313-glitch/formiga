@@ -7,6 +7,20 @@ e este projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [0.5.0a1] — 2026-11-18
 
+### CLI interativa — cores, limpeza de tela e painel de abertura
+
+- Painel de abertura na CLI (local e retomada): sessão/transcript, ferramentas,
+  extensões, comandos e seções contribuídas pelas extensões (skills com nome e
+  descrição). O gateway envia o estado estruturado no frame `attached`; o
+  cliente formata e colore localmente.
+- Cores apenas em TTY (ou `CLICOLOR_FORCE=1`), desativadas por `--no-color` ou
+  `NO_COLOR`; `--no-clear` mantém a tela. Fora de TTY a saída continua sem
+  nenhuma sequência ANSI (regra do PRD §8).
+- Novo comando `/help`: lista comandos registrados, skills e seções de resumo.
+- API `register_summary` no registry/`ExtensionContext` para extensões
+  contribuírem seções do painel sem acoplar o núcleo a nomes concretos.
+- `AgentLoop` não mudou; TUI permanece intocada.
+
 ### Fase 9 — Skills declarativas (PRD §14)
 
 - `ext/skills/`: skill = pasta com `SKILL.md` (frontmatter `name`,

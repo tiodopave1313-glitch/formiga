@@ -21,6 +21,7 @@ from formiga.agent.extensions.registry import ExtensionRegistry
 from formiga.agent.loop import AgentLoop
 from formiga.agent.profiles import Profile, apply_profile, select_profile
 from formiga.agent.session import Session
+from formiga.agent.ui import linhas_ajuda
 from formiga.config import Config
 
 
@@ -168,6 +169,14 @@ def build_agent(
 
     registry.register_command(
         "cron", _listar_cron, extension="builtin", source="builtin"
+    )
+
+    def _ajuda(_argumentos: str = "") -> str:
+        """Lista comandos, skills e seções contribuídas pelas extensões."""
+        return "\n".join(linhas_ajuda(registry))
+
+    registry.register_command(
+        "help", _ajuda, extension="builtin", source="builtin"
     )
 
     # pi.emit em linha: eventos custom de extensão (notification,
