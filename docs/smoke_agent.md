@@ -194,6 +194,35 @@ Verificar:
 - [ ] `formiga cron disable|enable|rm <id>` altera o estado do job.
 - [ ] `jobs.json` persiste em `~/.formiga/`.
 
+# 9. Memória estilo Hermes
+
+A memória tem recall (busca FTS5 em sessões passadas), memória curada
+(`MEMORY.md` com nudge + aprovação) e perfil (`USER.md` injetado no prompt).
+
+```bash
+# 1. Rode uma sessão que aprenda algo
+formiga agent "anote que o usuário gosta de chá"
+
+# 2. Veja sugestões pendentes e aprova
+formiga memory pending
+formiga memory save
+
+# 3. Busque em sessões passadas (via recall dentro do agent)
+formiga agent "o que o usuário gosta de beber?"
+
+# 4. Inspecione
+cat ~/.formiga/memory/MEMORY.md
+```
+
+Verificar:
+
+- [ ] `formiga memory pending` lista sugestões stageadas pelo nudge.
+- [ ] `formiga memory save` grava o fato em `~/.formiga/memory/MEMORY.md`.
+- [ ] `formiga memory show` exibe perfil e memória curada.
+- [ ] O modelo usa `recall` para achar fatos de sessão antiga.
+- [ ] `USER.md` aparece como seção no prompt (ver `transcript.md`).
+- [ ] Nenhuma credencial aparece em `MEMORY.md`.
+
 ## Aceite (marcar ao terminar)
 
 - [ ] `formiga agent --print` responde com o modelo real (NIM ou local).
@@ -205,6 +234,8 @@ Verificar:
 - [ ] `Ctrl+C`/`Esc` cooperativo; estado final correto.
 - [ ] Gateway: `start`/`status`/`stop` funcionam; reanexo mostra resposta.
 - [ ] Cron: `add`/`list`/`run`/`disable`/`rm` funcionam; `jobs.json` persiste.
+- [ ] Memory: `memory pending`/`save`/`show` funcionam; `recall` acha fato de
+      sessão antiga; `MEMORY.md`/`USER.md` em `~/.formiga/memory/`.
 - [ ] `--print` e `--local` rodam sem gateway.
 - [ ] Nenhuma credencial em `messages.json`, `events.jsonl`, `transcript.md`
       nem stdout.
