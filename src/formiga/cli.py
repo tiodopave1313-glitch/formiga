@@ -17,6 +17,13 @@ from formiga.agent.cron import (
 )
 from formiga.agent.factory import build_agent
 from formiga.agent.session import Session
+from formiga.agent.ui import (
+    estado_sessao,
+    limpar_tela,
+    linhas_painel,
+    pintar,
+    sem_cor,
+)
 from formiga.config import Config, ConfigError
 from formiga.configfile import (
     global_config_path,
@@ -184,6 +191,18 @@ def build_parser() -> argparse.ArgumentParser:
         dest="local_mode",
         action="store_true",
         help="Execução in-process (modo v1), sem usar o daemon do gateway.",
+    )
+    agent.add_argument(
+        "--no-clear",
+        dest="no_clear",
+        action="store_true",
+        help="Não limpa a tela ao iniciar a CLI interativa.",
+    )
+    agent.add_argument(
+        "--no-color",
+        dest="no_color",
+        action="store_true",
+        help="Desativa cores na CLI interativa (equivale a NO_COLOR=1).",
     )
     agent.add_argument(
         "--session-dir",
@@ -473,85 +492,93 @@ def _run_tui(config: Config, session: Session, args) -> int:
     return EXIT_OK
 
 
+class _EventosCli:
+    """Formata eventos do loop para a CLI interativa (local e retomada)."""
+
+    def __init__(self) -> None:
+        self.budget_snapshot: dict = {}
+
+    def exibe(self, event: str, data: dict) -> None:
+        if event == "stream":
+            sys.stdout.write(data.get("text", ""))
+            sys.stdout.flush()
+        elif event == "tool_start":
+            # garante quebra de linha antes da linha de tool
+            nome = str(data.get("tool"))
+            sys.stdout.write(
+                f"\n{pintar('⚙', 'cyan', negrito=True)} "
+                f"{pintar(nome, 'cyan')} — {data.get('args', '')}"
+            )
+            sys.stdout.flush()
+        elif event == "tool_end":
+            if data.get("budget_exhausted"):
+                sys.stdout.write(
+                    pintar(
+                        f"  (⚙ {data.get('tool')} — orçamento esgotado)", "yellow"
+                    )
+                )
+            elif not data.get("ok", True):
+                seconds = data.get("seconds")
+                dur = f" ({seconds:.1f} s)" if isinstance(seconds, (int, float)) else ""
+                sys.stdout.write(pintar(f"  ✗ erro{dur}", "red"))
+            else:
+                seconds = data.get("seconds")
+                if isinstance(seconds, (int, float)):
+                    sys.stdout.write(pintar(f"  ({seconds:.1f} s)", dim=True))
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+        elif event == "tool_progress":
+            sys.stdout.write(pintar(f"· {data.get('message', '')}", dim=True) + "\n")
+            sys.stdout.flush()
+        elif event == "notification":
+            sys.stdout.write(f"{pintar('ℹ', 'cyan')} {data.get('text', '')}\n")
+            sys.stdout.flush()
+        elif event == "extension_status":
+            sys.stdout.write(
+                pintar(f"· {data.get('key')}: {data.get('text', '')}", dim=True) + "\n"
+            )
+            sys.stdout.flush()
+        elif event == "budget":
+            self.budget_snapshot = data
+        elif event == "run_final" and not data.get("streamed"):
+            # resposta parcial (orçamento/interrupção) já impressa via stream
+            self.imprime_orcamento()
+        elif event == "interrupted":
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+
+    def imprime_orcamento(self) -> None:
+        if not self.budget_snapshot:
+            return
+        b = self.budget_snapshot
+        sys.stdout.write(
+            pintar(
+                f"\nturnos {b.get('turns', 0)}/{b.get('max_turns', 0)} · "
+                f"llm {b.get('llm_calls', 0)}/{b.get('max_llm_calls', 0)} · "
+                f"ctx {b.get('context_tokens', 0)}/{b.get('max_context_tokens', 0)} · "
+                f"ext {b.get('ext', 0)} ferramentas\n",
+                dim=True,
+            )
+        )
+        sys.stdout.flush()
+
+
 def _run_interactive(config: Config, session: Session, args) -> int:
     """CLI interativa padrão.
 
     Por padrão anexa ao gateway local (sobe on-demand). Com `--local` executa
     in-process (modo v1), sem usar o daemon.
     """
+    sem_cor(bool(getattr(args, "no_color", False)))
     transcript_path = session.transcript_path
-    print(f"formiga agent · sessão: {session.dir}")
-    print(f"transcript: {transcript_path} · Ctrl+C interrompe a resposta · Ctrl+D sai")
 
-    budget_snapshot: dict = {}
+    def _abertura(estado: dict) -> None:
+        if not getattr(args, "no_clear", False):
+            limpar_tela()
+        print("\n".join(linhas_painel(estado)))
+        print()
 
-    def _exibe_evento(event: str, data: dict) -> None:
-        nonlocal budget_snapshot
-        if event == "stream":
-            sys.stdout.write(data.get("text", ""))
-            sys.stdout.flush()
-        elif event == "tool_start":
-            # garante quebra de linha antes da linha de tool
-            sys.stdout.write(f"\n⚙ {data.get('tool')} — {data.get('args', '')}")
-            sys.stdout.flush()
-        elif event == "tool_end":
-            if data.get("budget_exhausted"):
-                sys.stdout.write(f"  (⚙ {data.get('tool')} — orçamento esgotado)")
-            elif not data.get("ok", True):
-                seconds = data.get("seconds")
-                dur = f" ({seconds:.1f} s)" if isinstance(seconds, (int, float)) else ""
-                sys.stdout.write(f"  ✗ erro{dur}")
-            else:
-                seconds = data.get("seconds")
-                if isinstance(seconds, (int, float)):
-                    sys.stdout.write(f"  ({seconds:.1f} s)")
-            sys.stdout.write("\n")
-            sys.stdout.flush()
-        elif event == "tool_progress":
-            sys.stdout.write(f"· {data.get('message', '')}\n")
-            sys.stdout.flush()
-        elif event == "notification":
-            sys.stdout.write(f"ℹ {data.get('text', '')}\n")
-            sys.stdout.flush()
-        elif event == "extension_status":
-            sys.stdout.write(f"· {data.get('key')}: {data.get('text', '')}\n")
-            sys.stdout.flush()
-        elif event == "budget":
-            budget_snapshot = data
-        elif event == "run_final" and not data.get("streamed"):
-            # resposta parcial (orçamento/interrupção) já impressa via stream
-            # imprime linha de orçamento
-            if budget_snapshot:
-                t = budget_snapshot.get("turns", 0)
-                mt = budget_snapshot.get("max_turns", 0)
-                lc = budget_snapshot.get("llm_calls", 0)
-                mlc = budget_snapshot.get("max_llm_calls", 0)
-                ctx = budget_snapshot.get("context_tokens", 0)
-                mctx = budget_snapshot.get("max_context_tokens", 0)
-                ext = budget_snapshot.get("ext", 0)
-                sys.stdout.write(
-                    f"\nturnos {t}/{mt} · llm {lc}/{mlc} · "
-                    f"ctx {ctx}/{mctx} · ext {ext} ferramentas\n"
-                )
-                sys.stdout.flush()
-        elif event == "interrupted":
-            sys.stdout.write("\n")
-            sys.stdout.flush()
-
-    def _imprime_orcamento() -> None:
-        if budget_snapshot:
-            t = budget_snapshot.get("turns", 0)
-            mt = budget_snapshot.get("max_turns", 0)
-            lc = budget_snapshot.get("llm_calls", 0)
-            mlc = budget_snapshot.get("max_llm_calls", 0)
-            ctx = budget_snapshot.get("context_tokens", 0)
-            mctx = budget_snapshot.get("max_context_tokens", 0)
-            ext = budget_snapshot.get("ext", 0)
-            sys.stdout.write(
-                f"\nturnos {t}/{mt} · llm {lc}/{mlc} · "
-                f"ctx {ctx}/{mctx} · ext {ext} ferramentas\n"
-            )
-            sys.stdout.flush()
+    eventos = _EventosCli()
 
     use_gateway = not args.local_mode
     client = None
@@ -570,7 +597,8 @@ def _run_interactive(config: Config, session: Session, args) -> int:
 
     if not use_gateway:
         loop = build_agent(config, session)
-        loop.on_event = _exibe_evento
+        loop.on_event = eventos.exibe
+        _abertura(estado_sessao(loop.registry, session))
 
         # Se args.question veio, roda uma vez antes de entrar no prompt
         if args.question and args.question.strip():
@@ -583,7 +611,7 @@ def _run_interactive(config: Config, session: Session, args) -> int:
 
         while True:
             try:
-                q = input("\npergunta> ")
+                q = input(f"\n{pintar('pergunta> ', 'cyan', negrito=True)}")
             except EOFError:
                 if loop is not None:
                     loop.end_session()
@@ -615,7 +643,7 @@ def _run_interactive(config: Config, session: Session, args) -> int:
 
             try:
                 loop.run(q)
-                _imprime_orcamento()
+                eventos.imprime_orcamento()
             except LLMError as exc:
                 print(f"\n✗ erro: {exc}")
                 continue
@@ -659,23 +687,28 @@ def _run_interactive(config: Config, session: Session, args) -> int:
             )
             return
 
+        _abertura(
+            getattr(client, "state", None)
+            or {"session_dir": str(session.dir), "transcript": str(transcript_path)}
+        )
+
         # Se args.question veio, roda uma vez antes de entrar no prompt
         if args.question and args.question.strip():
-            client.on_event = _exibe_evento
+            client.on_event = eventos.exibe
             try:
                 await client.submit(args.question)
             except LLMError as exc:
                 print(f"\n✗ erro: {exc}")
             except KeyboardInterrupt:
                 pass
-            _imprime_orcamento()
+            eventos.imprime_orcamento()
 
         loop_async = asyncio.get_event_loop()
 
         while True:
             try:
                 q = await loop_async.run_in_executor(
-                    None, input, "\npergunta> "
+                    None, input, f"\n{pintar('pergunta> ', 'cyan', negrito=True)}"
                 )
             except EOFError:
                 await client.close()
@@ -704,7 +737,7 @@ def _run_interactive(config: Config, session: Session, args) -> int:
                 print(resultado)
                 continue
 
-            client.on_event = _exibe_evento
+            client.on_event = eventos.exibe
             try:
                 await client.submit(q)
             except LLMError as exc:
@@ -712,10 +745,7 @@ def _run_interactive(config: Config, session: Session, args) -> int:
                 continue
             except KeyboardInterrupt:
                 continue
-            _imprime_orcamento()
-
-    asyncio.run(_main_gateway())
-    return EXIT_OK
+            eventos.imprime_orcamento()
 
     asyncio.run(_main_gateway())
     return EXIT_OK
@@ -741,8 +771,7 @@ def _run_resume(config: Config, session: Session, args) -> int:
 
     session = Session(base_dir, session_id=session_id)
     transcript_path = session.transcript_path
-    print(f"formiga agent · retomando sessão: {session.dir}")
-    print(f"transcript: {transcript_path} · Ctrl+C interrompe a resposta · Ctrl+D sai")
+    sem_cor(bool(getattr(args, "no_color", False)))
 
     loop = build_agent(config, session)
 
@@ -753,78 +782,18 @@ def _run_resume(config: Config, session: Session, args) -> int:
     else:
         print("Sessão vazia; iniciando do zero.", file=sys.stderr)
 
-    budget_snapshot: dict = {}
+    if not getattr(args, "no_clear", False):
+        limpar_tela()
+    print("\n".join(linhas_painel(estado_sessao(loop.registry, session))))
+    print()
 
-    def _exibe_evento(event: str, data: dict) -> None:
-        nonlocal budget_snapshot
-        if event == "stream":
-            sys.stdout.write(data.get("text", ""))
-            sys.stdout.flush()
-        elif event == "tool_start":
-            sys.stdout.write(f"\n⚙ {data.get('tool')} — {data.get('args', '')}")
-            sys.stdout.flush()
-        elif event == "tool_end":
-            if data.get("budget_exhausted"):
-                sys.stdout.write(f"  (⚙ {data.get('tool')} — orçamento esgotado)")
-            elif not data.get("ok", True):
-                seconds = data.get("seconds")
-                dur = f" ({seconds:.1f} s)" if isinstance(seconds, (int, float)) else ""
-                sys.stdout.write(f"  ✗ erro{dur}")
-            else:
-                seconds = data.get("seconds")
-                if isinstance(seconds, (int, float)):
-                    sys.stdout.write(f"  ({seconds:.1f} s)")
-            sys.stdout.write("\n")
-            sys.stdout.flush()
-        elif event == "tool_progress":
-            sys.stdout.write(f"· {data.get('message', '')}\n")
-            sys.stdout.flush()
-        elif event == "notification":
-            sys.stdout.write(f"ℹ {data.get('text', '')}\n")
-            sys.stdout.flush()
-        elif event == "extension_status":
-            sys.stdout.write(f"· {data.get('key')}: {data.get('text', '')}\n")
-            sys.stdout.flush()
-        elif event == "budget":
-            budget_snapshot = data
-        elif event == "run_final" and not data.get("streamed"):
-            if budget_snapshot:
-                t = budget_snapshot.get("turns", 0)
-                mt = budget_snapshot.get("max_turns", 0)
-                lc = budget_snapshot.get("llm_calls", 0)
-                mlc = budget_snapshot.get("max_llm_calls", 0)
-                ctx = budget_snapshot.get("context_tokens", 0)
-                mctx = budget_snapshot.get("max_context_tokens", 0)
-                ext = budget_snapshot.get("ext", 0)
-                sys.stdout.write(
-                    f"\nturnos {t}/{mt} · llm {lc}/{mlc} · "
-                    f"ctx {ctx}/{mctx} · ext {ext} ferramentas\n"
-                )
-                sys.stdout.flush()
-        elif event == "interrupted":
-            sys.stdout.write("\n")
-            sys.stdout.flush()
+    eventos = _EventosCli()
 
-    def _imprime_orcamento() -> None:
-        if budget_snapshot:
-            t = budget_snapshot.get("turns", 0)
-            mt = budget_snapshot.get("max_turns", 0)
-            lc = budget_snapshot.get("llm_calls", 0)
-            mlc = budget_snapshot.get("max_llm_calls", 0)
-            ctx = budget_snapshot.get("context_tokens", 0)
-            mctx = budget_snapshot.get("max_context_tokens", 0)
-            ext = budget_snapshot.get("ext", 0)
-            sys.stdout.write(
-                f"\nturnos {t}/{mt} · llm {lc}/{mlc} · "
-                f"ctx {ctx}/{mctx} · ext {ext} ferramentas\n"
-            )
-            sys.stdout.flush()
-
-    loop.on_event = _exibe_evento
+    loop.on_event = eventos.exibe
 
     while True:
         try:
-            q = input("\npergunta> ")
+            q = input(f"\n{pintar('pergunta> ', 'cyan', negrito=True)}")
         except EOFError:
             print(f"\nSaindo. Sessão salva em {transcript_path}")
             return EXIT_OK
@@ -852,7 +821,7 @@ def _run_resume(config: Config, session: Session, args) -> int:
 
         try:
             loop.run(q)
-            _imprime_orcamento()
+            eventos.imprime_orcamento()
         except LLMError as exc:
             print(f"\n✗ erro: {exc}")
             continue

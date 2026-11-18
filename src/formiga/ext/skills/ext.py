@@ -260,6 +260,16 @@ def setup(pi: ExtensionAPI) -> None:
         return "Uso: /skills [list|pending|approve <id>|reject <id>]"
 
     pi.register_command("skills", command_skills)
+
+    def resumo_skills() -> list[str]:
+        return [
+            f"{skill.name} — {skill.description}"
+            + (" [projeto]" if skill.source == "project" else "")
+            for skill in store.skills
+        ]
+
+    pi.register_summary("skills", resumo_skills)
+
     for skill in store.skills:
         if skill.name == "skills" or skill.name in pi.registry.commands:
             store.warnings.append(

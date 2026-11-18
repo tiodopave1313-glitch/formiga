@@ -125,6 +125,7 @@ class GatewayClient:
         self._reader: asyncio.StreamReader | None = None
         self._writer: asyncio.StreamWriter | None = None
         self._session_id: str | None = None
+        self.state: dict = {}
         self.on_event: Callable[[str, dict], None] | None = None
 
     # -- conexão ------------------------------------------------------- #
@@ -247,6 +248,7 @@ class GatewayClient:
                 continue
             if msg.get("action") == "attached":
                 self._session_id = msg.get("session") or session_id
+                self.state = msg.get("state") or {}
                 return self._session_id
         raise TimeoutError("gateway não confirmou a criação da sessão")
 
@@ -260,6 +262,9 @@ class GatewayClient:
         mensagens = await self._read_until(é_attached, timeout=30.0)
         for msg in mensagens:
             await self._dispatch_event(msg)
+        for msg in mensagens:
+            if msg.get("action") == "attached":
+                self.state = msg.get("state") or {}
         self._session_id = session_id
 
     async def submit(self, prompt: str) -> None:

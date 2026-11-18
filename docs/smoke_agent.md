@@ -47,6 +47,10 @@ formiga agent \
 
 Na CLI interativa, verificar (nesta ordem):
 
+- [ ] A tela é limpa e o painel de abertura mostra sessão, ferramentas,
+      extensões, comandos e skills instaladas (com descrição).
+- [ ] `--no-clear` mantém a tela; `--no-color` (ou `NO_COLOR=1`) remove as
+      cores sem quebrar o layout.
 - [ ] O prompt `pergunta>` aparece; Enter inicia.
 - [ ] O texto do agente aparece **enquanto é gerado** (stream token a token).
 - [ ] Cada ferramenta aparece em linha **antes** de executar:
@@ -60,7 +64,8 @@ Na CLI interativa, verificar (nesta ordem):
 - [ ] `Ctrl+C` **no prompt** sai do programa limpo.
 - [ ] `Ctrl+D` (EOF) no prompt sai apontando o `transcript.md`.
 - [ ] Com `NO_COLOR=1 formiga agent …`, tudo permanece legível.
-- [ ] O relatório do `deep_search` fica em `sessoes/<timestamp>/`.
+- [ ] `/help` lista comandos e skills; o relatório do `deep_search` fica em
+      `sessoes/<timestamp>/`.
 - [ ] Comando `/budget` imprime turnos/llm/ctx/ext e consumo por ferramenta.
 - [ ] Comando `/new sim` inicia nova sessão em disco preservando a anterior.
 

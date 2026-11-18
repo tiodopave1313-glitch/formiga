@@ -72,6 +72,7 @@ class ExtensionRegistry:
         self._commands: dict[str, CommandRegistration] = {}
         self._extensions: list[ExtensionRecord] = []
         self._handlers: dict[str, list[tuple[str, Callable[..., object]]]] = {}
+        self._summaries: dict[str, Callable[[], list[str]]] = {}
         self._event_sink: Callable[[str, dict], None] = lambda *_: None
         self._session: Session | None = None
         self.warnings: list[str] = []
@@ -138,6 +139,19 @@ class ExtensionRegistry:
 
     def register_extension(self, record: ExtensionRecord) -> None:
         self._extensions.append(record)
+
+    def register_summary(
+        self, name: str, provider: Callable[[], list[str]]
+    ) -> None:
+        """Contribui uma seção de resumo para o painel e para `/help`.
+
+        O provider é chamado sob demanda (ex.: após aprovar uma skill), de modo
+        que a listagem reflita o estado atual sem re-registro.
+        """
+        normalized = name.strip().lower()
+        if not normalized:
+            raise ValueError("nome de seção inválido")
+        self._summaries[normalized] = provider
 
     def add_handler(
         self,
@@ -208,6 +222,20 @@ class ExtensionRegistry:
     @property
     def commands(self) -> dict[str, CommandRegistration]:
         return dict(self._commands)
+
+    @property
+    def summaries(self) -> dict[str, list[str]]:
+        """Seções de resumo das extensões (provider executado agora)."""
+        resultado: dict[str, list[str]] = {}
+        for nome, provider in self._summaries.items():
+            try:
+                valor = provider()
+            except Exception as exc:  # extensões não derrubam a UI
+                self._extension_error(nome, "summary", exc)
+                continue
+            itens = [valor] if isinstance(valor, str) else list(valor)
+            resultado[nome] = [str(item) for item in itens if str(item).strip()]
+        return resultado
 
     @property
     def extensions(self) -> tuple[ExtensionRecord, ...]:
@@ -348,6 +376,11 @@ class ExtensionContext:
         self._registry.register_command(
             name, handler, extension=self.name, source=self.source
         )
+
+    def register_summary(
+        self, name: str, provider: Callable[[], list[str]]
+    ) -> None:
+        self._registry.register_summary(name, provider)
 
     def on(self, event: str, handler: Callable[..., object]) -> None:
         self._registry.add_handler(event, handler, extension=self.name)

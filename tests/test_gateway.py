@@ -173,6 +173,13 @@ async def test_gateway_create_retorna_attached_e_session_id():
     assert len(attached) == 1
     assert "session" in attached[0]
     assert attached[0]["session"] in gw.sessions
+    # Estado estruturado para o painel da CLI (dados, não ANSI).
+    estado = attached[0].get("state") or {}
+    assert estado.get("session") == attached[0]["session"]
+    assert "ls" in estado.get("tools", [])
+    assert any(ext["name"] == "core" for ext in estado.get("extensions", []))
+    assert "/tools" not in estado.get("commands", [])  # nomes sem barra
+    assert "tools" in estado.get("commands", [])
 
 
 @pytest.mark.asyncio

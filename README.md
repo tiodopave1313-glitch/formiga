@@ -58,10 +58,14 @@ legível), mas **não são retomadas** no MVP.
 formiga agent "qualquer pergunta sobre o projeto"
 ```
 
-- Sem flags: **CLI interativa** — `pergunta>`, streaming token a token, linhas
-  de ferramenta em linha (`⚙ bash — command=…`), barra de orçamento
+- Sem flags: **CLI interativa** — limpa a tela e mostra um painel de abertura
+  (ferramentas, extensões, comandos e skills instaladas), depois `pergunta>`,
+  streaming token a token, linhas de ferramenta em linha
+  (`⚙ bash — command=…`), barra de orçamento
   (`turnos n/24 · llm n/120 · ctx Xk/Yk · ext N ferramentas`) e comandos `/`
-  (`/tools`, `/ext`, `/budget`, `/new`).
+  (`/help` lista tudo; `/tools`, `/ext`, `/budget`, `/new` etc.).
+- Cores são usadas apenas em TTY; `--no-color` (ou `NO_COLOR=1`) desativa e
+  `--no-clear` mantém a tela como está. `CLICOLOR_FORCE=1` força cor em pipes.
 - `--print`: headless, imprime a resposta final no stdout (útil em scripts).
 - `--tui`: TUI Textual (80×24, barra de status com perfil, eventos de extensão
   em linha, `Esc`/`Ctrl+C` cooperativos). Requer o extra `gui`.
@@ -521,6 +525,7 @@ formiga/
 │       ├── profiles.py    # perfis de modelo (gemma4-e4b, nemotron-3.5-bolt-e4b)
 │       ├── guardrails.py  # AgentBudget, ToolBudgets, AntiLoop
 │       ├── session.py     # sessão em disco (messages, events, transcript)
+│       ├── ui.py          # cores, limpeza de tela e painel da CLI
 │       ├── extensions/    # engine de extensões (registro, hooks, eventos)
 │       │   ├── api.py     # ExtensionAPI (register_tool, on, ui.notify)
 │       │   ├── registry.py# ExtensionRegistry, ExtensionContext, set_event_sink

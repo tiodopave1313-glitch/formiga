@@ -23,3 +23,9 @@ class ExtensionAPI(Protocol):
     ) -> None:
         """Registra uma ferramenta opcionalmente limitada por mensagem."""
         ...
+
+    def register_summary(
+        self, name: str, provider: object
+    ) -> None:
+        """Contribui uma seção de resumo (ex.: skills) para painel e `/help`."""
+        ...
