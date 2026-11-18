@@ -16,5 +16,7 @@ OBSERVATION_EVENTS = frozenset(
         # Fase 7 (cron): disparo e conclusão de um job agendado.
         "job_start",
         "job_end",
+        # Fase 8 (memória): fim de sessão — dispara nudge de memória curada.
+        "session_end",
     }
 )

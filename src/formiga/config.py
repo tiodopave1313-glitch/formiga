@@ -51,7 +51,7 @@ ENV_AGENT_MAX_WEB_FETCHES = "FORMIGA_AGENT_MAX_WEB_FETCHES"
 ENV_AGENT_TOOL_RESULT_CHARS = "FORMIGA_AGENT_TOOL_RESULT_CHARS"
 ENV_AGENT_WORKDIR = "FORMIGA_AGENT_WORKDIR"
 ENV_EXTENSIONS_ENABLED = "FORMIGA_EXTENSIONS_ENABLED"
-DEFAULT_ENABLED_EXTENSIONS = ("core", "web", "deepsearch")
+DEFAULT_ENABLED_EXTENSIONS = ("core", "web", "deepsearch", "memory")
 
 # Janela de contexto e orçamento de schemas (seção 9 do PRD v2).
 ENV_AGENT_MAX_CONTEXT_TOKENS = "FORMIGA_AGENT_MAX_CONTEXT_TOKENS"
@@ -65,6 +65,11 @@ ENV_PROFILE_MODEL_HINT = "FORMIGA_PROFILE_MODEL_HINT"
 # Tarefas agendadas (cron, Fase 7).
 ENV_CRON_CATCHUP = "FORMIGA_CRON_CATCHUP"
 ENV_CRON_TZ = "FORMIGA_CRON_TZ"
+
+# Memória estilo Hermes (Fase 8).
+ENV_MEMORY_RECALL = "FORMIGA_MEMORY_RECALL"
+ENV_MEMORY_NUDGE = "FORMIGA_MEMORY_NUDGE"
+ENV_MEMORY_MAX_TOKENS = "FORMIGA_MEMORY_MAX_TOKENS"
 
 ENV_OPENAI_URL = "FORMIGA_OPENAI_URL"
 ENV_OPENAI_API_KEY_ENV = "FORMIGA_OPENAI_API_KEY_ENV"
@@ -189,6 +194,11 @@ class Config:
     cron_catchup: str = "skip"  # "skip" (default) ou "once"
     cron_tz: str | None = None  # fuso dos schedules; None = sistema
 
+    # Memória estilo Hermes (Fase 8).
+    memory_recall: bool = True  # índice FTS5 ativo / recall disponível
+    memory_nudge: bool = True  # sugestões de MEMORY.md/USER.md no session_end
+    memory_max_tokens: int = 1600  # teto rígido de tokens injetados no prompt
+
     @classmethod
     def from_sources(
         cls,
@@ -294,6 +304,20 @@ class Config:
             config = replace(config, cron_catchup=v)
         if (v := _env(env, ENV_CRON_TZ)) is not None:
             config = replace(config, cron_tz=v)
+        if (v := _env_bool(env, ENV_MEMORY_RECALL)) is not None:
+            config = replace(config, memory_recall=v)
+        if (v := _env_bool(env, ENV_MEMORY_NUDGE)) is not None:
+            config = replace(config, memory_nudge=v)
+        if (v := _env(env, ENV_MEMORY_MAX_TOKENS)) is not None:
+            try:
+                config = replace(
+                    config, memory_max_tokens=_positive_int("memory_max_tokens", int(v))
+                )
+            except ValueError as exc:
+                raise ConfigError(
+                    f"{ENV_MEMORY_MAX_TOKENS} deve ser um inteiro positivo "
+                    f"(recebido: {v!r})."
+                ) from exc
         config.validate()
         return config
 
@@ -361,6 +385,9 @@ class Config:
             "profile_model_hint",
             "cron_catchup",
             "cron_tz",
+            "memory_recall",
+            "memory_nudge",
+            "memory_max_tokens",
         ):
             value = getattr(args, key, None)
             if value is not None and value != getattr(self, key):
@@ -418,6 +445,10 @@ class Config:
         if self.cron_catchup not in {"skip", "once"}:
             raise ConfigError(
                 f"cron_catchup deve ser 'skip' ou 'once' (recebido: {self.cron_catchup!r})."
+            )
+        if self.memory_max_tokens <= 0:
+            raise ConfigError(
+                f"memory_max_tokens deve ser positivo (recebido: {self.memory_max_tokens})."
             )
         if self.reserved_llm_calls > self.max_llm_calls:
             raise ConfigError(

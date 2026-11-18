@@ -86,6 +86,15 @@ _EXTENSIONS_KEYS = {
 _PROFILE_KEYS = {
     "model_hint": "profile_model_hint",
 }
+_CRON_KEYS = {
+    "catchup": "cron_catchup",
+    "tz": "cron_tz",
+}
+_MEMORY_KEYS = {
+    "recall": "memory_recall",
+    "nudge": "memory_nudge",
+    "max_tokens": "memory_max_tokens",
+}
 _SECTIONS = {
     "llm": _LLM_KEYS,
     "search": _SEARCH_KEYS,
@@ -93,6 +102,8 @@ _SECTIONS = {
     "agent": _AGENT_KEYS,
     "extensions": _EXTENSIONS_KEYS,
     "profile": _PROFILE_KEYS,
+    "cron": _CRON_KEYS,
+    "memory": _MEMORY_KEYS,
 }
 
 _FLOAT_FIELDS = {"llm_temperature", "llm_timeout", "timeout_seconds", "agent_timeout_seconds"}
