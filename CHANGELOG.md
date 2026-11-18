@@ -5,6 +5,31 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [0.5.0a1] — 2026-11-18
+
+### Fase 9 — Skills declarativas (PRD §14)
+
+- `ext/skills/`: skill = pasta com `SKILL.md` (frontmatter `name`,
+  `description`, `when_to_use`) + corpo Markdown, sem código; parser valida
+  nome kebab-case, exige descrição e recusa credenciais.
+- Descoberta determinística em `~/.formiga/skills/` (global) e
+  `.formiga/skills/` (projeto, carregado só se o projeto estiver na allowlist
+  de trust); skills corrompidas/duplicadas geram aviso e não derrubam a sessão.
+- Custo zero quando ociosas: `/nome-da-skill` agenda a expansão do corpo na
+  próxima mensagem e registra o evento `skill_expanded` (não entra no prompt
+  até ser chamada). `/skills` lista, mostra pendentes e aprova/descarta.
+- Ferramenta `skill_manage(action=list|write|delete)` com **staging** em
+  `~/.formiga/skills/pending.json`: nada é gravado ou removido do disco sem
+  `/skills approve <id>` (humano); `/skills reject <id>` descarta.
+- Nudge pós-tarefa: novo evento `task_end` (com `successful` e
+  `successful_tools`) disparado pelo `AgentLoop` ao final de cada turno;
+  após uso bem-sucedido de ferramentas, o harness sugere persistir o
+  procedimento como skill — sempre com aprovação.
+- `/skills` e comandos por skill na CLI/TUI; `formiga skills list` no CLI.
+- Extensão builtin `skills` habilitada por default
+  (`DEFAULT_ENABLED_EXTENSIONS`), sem config própria.
+- 424 testes verdes (incluindo 20 de skills) + `ruff check` limpo.
+
 ## [0.2.0a1] — 2026-11-17
 
 ### MVP do Formiga Agent (PRD v2, Fases 1–5)

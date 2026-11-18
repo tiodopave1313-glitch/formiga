@@ -221,6 +221,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("version", help="Mostra a versão.")
 
+    skills = sub.add_parser("skills", help="Gerencia skills declarativas.")
+    skills_sub = skills.add_subparsers(dest="skills_acao", required=True)
+    skills_sub.add_parser("list", help="Lista skills globais e do projeto confiável.")
+
     trust = sub.add_parser(
         "trust", help="Adiciona um projeto à allowlist global de extensões (.formiga/extensions)."
     )
@@ -342,6 +346,20 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "version":
         print(f"formiga {__version__}")
+        return EXIT_OK
+
+    if args.command == "skills":
+        from formiga.ext.skills.store import SkillStore
+
+        store = SkillStore.discover(project_root=Path.cwd())
+        if not store.skills:
+            print("Nenhuma skill instalada.")
+        else:
+            for skill in store.skills:
+                when = f" (quando usar: {skill.when_to_use})" if skill.when_to_use else ""
+                print(f"/{skill.name} — {skill.description}{when} [{skill.source}]")
+        for warning in store.warnings:
+            print(f"Aviso: {warning}", file=sys.stderr)
         return EXIT_OK
 
     if args.command == "trust":

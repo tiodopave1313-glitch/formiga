@@ -164,6 +164,40 @@ formiga memory save
   env `FORMIGA_MEMORY_RECALL` / `FORMIGA_MEMORY_NUDGE` /
   `FORMIGA_MEMORY_MAX_TOKENS`.
 
+### `formiga skills` — conhecimento declarativo (Fase 9)
+
+Skills são procedimentos reutilizáveis em Markdown (`SKILL.md`), não código.
+Ficam **fora do prompt** até serem chamadas: custo zero quando ociosas. São
+carregadas de `~/.formiga/skills/` (globais) e de `.formiga/skills/` do projeto
+(somente se o projeto estiver na allowlist de trust).
+
+```bash
+# Crie uma skill global manualmente
+mkdir -p ~/.formiga/skills/revisar-pr
+cat > ~/.formiga/skills/revisar-pr/SKILL.md <<'EOF'
+---
+name: revisar-pr
+description: Checklist de revisão de pull request
+when_to_use: Ao revisar um PR
+---
+1. Leia o diff completo.
+2. Verifique testes e casos de borda.
+3. Aponte riscos com arquivo e linha.
+EOF
+
+# Liste as skills disponíveis (globais + projeto confiável)
+formiga skills list
+```
+
+Dentro do `formiga agent`, `/skills` lista as skills e `/revisar-pr` agenda a
+expansão do conteúdo para a próxima mensagem (registrada no evento
+`skill_expanded`). O modelo também pode propor novas skills com
+`skill_manage(action="write")`: a proposta fica em
+`~/.formiga/skills/pending.json` e **nada é gravado** até um humano aprovar com
+`/skills approve <id>` (ou descartar com `/skills reject <id>`). Depois de uma
+tarefa bem-sucedida com ferramentas, o harness sugere persistir o procedimento
+(nudge), mas nunca grava sozinho.
+
 ## Opções de `research`
 
 | Opção | Finalidade |
@@ -224,8 +258,8 @@ max_llm_calls = 40
 timeout_seconds = 900
 
 [extensions]
-# Builtins do MVP; ordem de carregamento é fixa: core, web, deepsearch.
-enabled = ["core", "web", "deepsearch"]
+# Ordem de carregamento = ordem desta lista.
+enabled = ["core", "web", "deepsearch", "memory", "skills"]
 # Diretórios de projeto cujo .formiga/ carrega (allowlist global).
 trusted_projects = []
 
@@ -495,10 +529,12 @@ formiga/
 │       └── tui/           # TUI Textual (80×24, barra de status)
 │           ├── app.py     # AgentApp, _handle_event, _update_status
 │           └── controller.py
-│   └── ext/               # ferramentas builtin (core, web, deepsearch)
+│   └── ext/               # extensões builtin
 │       ├── core/          # bash, read, edit (+ /tools, /ext, /budget, /new)
 │       ├── web/           # web_search
-│       └── deepsearch/    # deep_search com progresso em linha
+│       ├── deepsearch/    # deep_search com progresso em linha
+│       ├── memory/        # recall + MEMORY.md/USER.md (Fase 8)
+│       └── skills/        # SKILL.md + skill_manage com aprovação (Fase 9)
 └── tests/                 # testes offline com adaptadores falsos
 ```
 

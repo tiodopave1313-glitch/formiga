@@ -223,6 +223,52 @@ Verificar:
 - [ ] `USER.md` aparece como seção no prompt (ver `transcript.md`).
 - [ ] Nenhuma credencial aparece em `MEMORY.md`.
 
+## 10. Skills declarativas
+
+Skills ficam fora do prompt até serem chamadas por `/nome-da-skill`; escritas
+propostas pelo modelo exigem aprovação humana.
+
+```bash
+# 1. Instale uma skill global
+mkdir -p ~/.formiga/skills/checklist
+cat > ~/.formiga/skills/checklist/SKILL.md <<'EOF'
+---
+name: checklist
+description: Checklist de entrega
+when_to_use: Antes de fechar uma tarefa
+---
+- Rode a suíte de testes.
+- Confira o diff e as credenciais.
+EOF
+
+# 2. Confira a listagem
+formiga skills list
+
+# 3. Use no agent
+formiga agent
+# pergunta> /skills
+# pergunta> /checklist
+# pergunta> aplique o checklist ao último commit
+
+# 4. Peça ao modelo para propor uma skill e aprove
+# pergunta> crie uma skill chamada "revisar" com o procedimento que você usou
+# pergunta> /skills pending
+# pergunta> /skills approve <id>
+```
+
+Verificar:
+
+- [ ] `formiga skills list` mostra `/checklist` com descrição e origem.
+- [ ] `/skills` lista a skill; `/checklist` agenda a expansão.
+- [ ] A próxima mensagem contém o corpo da skill e o evento `skill_expanded`
+      aparece em `events.jsonl`.
+- [ ] `skill_manage` sem aprovação **não** cria `SKILL.md` (só `pending.json`).
+- [ ] `/skills approve <id>` grava e a skill já expande na mesma sessão.
+- [ ] `/skills reject <id>` descarta a proposta.
+- [ ] Skill em `.formiga/skills/` de projeto fora da allowlist não carrega
+      (aviso em `/skills`).
+- [ ] Após tarefa bem-sucedida com ferramentas, o nudge sugere `skill_manage`.
+
 ## Aceite (marcar ao terminar)
 
 - [ ] `formiga agent --print` responde com o modelo real (NIM ou local).
@@ -236,6 +282,8 @@ Verificar:
 - [ ] Cron: `add`/`list`/`run`/`disable`/`rm` funcionam; `jobs.json` persiste.
 - [ ] Memory: `memory pending`/`save`/`show` funcionam; `recall` acha fato de
       sessão antiga; `MEMORY.md`/`USER.md` em `~/.formiga/memory/`.
+- [ ] Skills: `skills list` e `/skills` listam; `/nome` expande; `skill_manage`
+      só grava após `/skills approve`; projeto sem trust não carrega skill.
 - [ ] `--print` e `--local` rodam sem gateway.
 - [ ] Nenhuma credencial em `messages.json`, `events.jsonl`, `transcript.md`
       nem stdout.

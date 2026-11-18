@@ -43,8 +43,8 @@ max_llm_calls = 40
 timeout_seconds = 900
 
 [extensions]
-# Builtins do MVP; ordem de carregamento é fixa: core, web, deepsearch.
-enabled = ["core", "web", "deepsearch"]
+# Ordem de carregamento = ordem desta lista.
+enabled = ["core", "web", "deepsearch", "memory", "skills"]
 # Diretórios de projeto cujo .formiga/ carrega (allowlist global).
 trusted_projects = []
 

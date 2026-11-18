@@ -136,6 +136,10 @@ class AgentLoop:
         # `session_end` emitido no máximo uma vez por instância do loop.
         self._session_ended = False
 
+        # Estado do turno atual para o evento `task_end` (nudge de skills).
+        self._task_completed_successfully = False
+        self._task_successful_tools = 0
+
     # ------------------------------------------------------------------ #
     # Cancelamento cooperativo
 
@@ -241,6 +245,10 @@ class AgentLoop:
                 self.session.append_transcript("\n")
                 self._agent_section = False
             self.session.append_transcript(f"\n## Agent\n{data.get('text', '')}\n")
+        if event == "tool_end":
+            self.registry.observe("tool_end", data)
+            if data.get("ok"):
+                self._task_successful_tools += 1
         self.on_event(event, data)
 
     def _budget_snapshot(self) -> dict:
@@ -265,9 +273,24 @@ class AgentLoop:
         ferramentas são reiniciados (seção 7 do PRD). Um cancelamento
         pendente (`cancel()`) é honrado imediatamente; a flag é limpa ao fim.
         """
+        completed = False
+        self._task_completed_successfully = False
+        self._task_successful_tools = 0
+        self.registry.observe("task_start", {"question": question})
         try:
-            return self._run(question)
+            result = self._run(question)
+            completed = True
+            return result
         finally:
+            self.registry.observe(
+                "task_end",
+                {
+                    "question": question,
+                    "completed": completed,
+                    "successful": self._task_completed_successfully,
+                    "successful_tools": self._task_successful_tools,
+                },
+            )
             self._cancel.clear()
 
     def _run(self, question: str) -> str:
@@ -403,6 +426,7 @@ class AgentLoop:
 
             # resposta final sem tool call
             final = response.content or "(sem resposta)"
+            self._task_completed_successfully = True
             self.messages.append({"role": "assistant", "content": final})
             self.session.save_messages(self.messages)
             self._pending_len = None  # turno confirmado: sem rollback
