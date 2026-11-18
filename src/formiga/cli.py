@@ -570,7 +570,6 @@ def _run_interactive(config: Config, session: Session, args) -> int:
     in-process (modo v1), sem usar o daemon.
     """
     sem_cor(bool(getattr(args, "no_color", False)))
-    transcript_path = session.transcript_path
 
     def _abertura(estado: dict) -> None:
         if not getattr(args, "no_clear", False):
@@ -615,7 +614,7 @@ def _run_interactive(config: Config, session: Session, args) -> int:
             except EOFError:
                 if loop is not None:
                     loop.end_session()
-                print(f"\nSaindo. Sessão salva em {transcript_path}")
+                print(f"\nSaindo. Sessão salva em {session.dir}")
                 return EXIT_OK
             except KeyboardInterrupt:
                 if loop is not None:
@@ -687,10 +686,7 @@ def _run_interactive(config: Config, session: Session, args) -> int:
             )
             return
 
-        _abertura(
-            getattr(client, "state", None)
-            or {"session_dir": str(session.dir), "transcript": str(transcript_path)}
-        )
+        _abertura(getattr(client, "state", None) or {"session_dir": str(session.dir)})
 
         # Se args.question veio, roda uma vez antes de entrar no prompt
         if args.question and args.question.strip():
@@ -712,7 +708,7 @@ def _run_interactive(config: Config, session: Session, args) -> int:
                 )
             except EOFError:
                 await client.close()
-                print(f"\nSaindo. Sessão salva em {transcript_path}")
+                print(f"\nSaindo. Sessão salva em {session.dir}")
                 return
             except KeyboardInterrupt:
                 print()
@@ -770,7 +766,6 @@ def _run_resume(config: Config, session: Session, args) -> int:
         session_id = sessoes[-1].session_id  # a mais recente (listadas ordenadas)
 
     session = Session(base_dir, session_id=session_id)
-    transcript_path = session.transcript_path
     sem_cor(bool(getattr(args, "no_color", False)))
 
     loop = build_agent(config, session)
@@ -795,7 +790,7 @@ def _run_resume(config: Config, session: Session, args) -> int:
         try:
             q = input(f"\n{pintar('pergunta> ', 'cyan', negrito=True)}")
         except EOFError:
-            print(f"\nSaindo. Sessão salva em {transcript_path}")
+            print(f"\nSaindo. Sessão salva em {session.dir}")
             return EXIT_OK
         except KeyboardInterrupt:
             print()

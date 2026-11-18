@@ -63,7 +63,6 @@ def test_cli_interativa_fluxo(tmp_path, monkeypatch, capsys):
 
     # cabeçalho
     assert "formiga agent · sessão:" in out
-    assert "transcript:" in out
     assert "Ctrl+C interrompe" in out
 
     # tool executada

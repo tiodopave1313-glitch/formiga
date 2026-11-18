@@ -117,7 +117,6 @@ def test_painel_lista_ferramentas_extensoes_comandos_e_skills(
     texto = "\n".join(linhas_painel(estado))
 
     assert "formiga agent · sessão:" in texto
-    assert "transcript:" in texto
     assert "FERRAMENTAS" in texto and "ls" in texto and "skill_manage" in texto
     assert "EXTENSÕES" in texto and "core" in texto and "skills" in texto
     assert "COMANDOS" in texto and "/skills" in texto

@@ -128,9 +128,8 @@ class AgentApp(App):
     def on_mount(self) -> None:
         self._write_user_block(
             "formiga agent",
-            "A sessão é salva em " + str(self.session.dir) + " (messages.json, "
-            "events.jsonl e transcript.md — o transcript tem toda a conversa, "
-            "dá para abrir e copiar de fora da TUI).",
+            "A sessão é salva em " + str(self.session.dir) + " (messages.json "
+            "e events.jsonl).",
         )
         endpoint = self._endpoint_hint()
         self._write_user_block(

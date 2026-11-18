@@ -181,7 +181,7 @@ def build_agent(
 
     # pi.emit em linha: eventos custom de extensão (notification,
     # extension_status, tool_progress, ...) chegam à mesma on_event do
-    # loop, que os espelha à CLI/TUI e ao transcript (seção 7.1 do PRD).
+    # loop, que os espelha à CLI/TUI (seção 7.1 do PRD).
     # Lê loop.on_event dinamicamente para respeitar reatribuições posteriores.
     def _event_sink(event: str, data: dict | None = None) -> None:
         loop.on_event(event, data or {})

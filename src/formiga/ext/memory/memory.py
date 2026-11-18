@@ -1,9 +1,8 @@
 """Extensão builtin de memória estilo Hermes (Fase 8 do PRD v2, §13).
 
 Camadas:
-- **Recall**: índice FTS5 (`ext/memory/index.py`) sobre `messages.json` e
-  `transcript.md` de sessões passadas; tool `recall(query, limit?)` e comando
-  `/recall <query>`.
+- **Recall**: índice FTS5 (`ext/memory/index.py`) sobre o `messages.json` de
+  sessões passadas; tool `recall(query, limit?)` e comando `/recall <query>`.
 - **Memória curada**: `~/.formiga/memory/MEMORY.md` (fatos duráveis) e
   `~/.formiga/memory/USER.md` (perfil do usuário), injetadas como seções do
   system prompt via hook `before_agent_start`.

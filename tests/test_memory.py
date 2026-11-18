@@ -30,20 +30,19 @@ from formiga.ext.memory.index import MemoryIndex
 # ---------------------------------------------------------------------- #
 
 
-def _monta_sessao(base: Path, session_id: str, transcript: str) -> Path:
-    """Cria `base/sessoes/<session_id>/` com messages.json e transcript.md."""
+def _monta_sessao(base: Path, session_id: str, fato: str) -> Path:
+    """Cria `base/sessoes/<session_id>/` com messages.json."""
     sdir = base / "sessoes" / session_id
     sdir.mkdir(parents=True)
     (sdir / "messages.json").write_text(
         json.dumps(
             [
                 {"role": "user", "content": "qual é a capital do brasil?"},
-                {"role": "assistant", "content": "Brasília é a capital."},
+                {"role": "assistant", "content": f"Brasília é a capital. {fato}"},
             ]
         ),
         encoding="utf-8",
     )
-    (sdir / "transcript.md").write_text(transcript, encoding="utf-8")
     return sdir
 
 

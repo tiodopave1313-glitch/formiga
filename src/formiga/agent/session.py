@@ -48,22 +48,6 @@ class Session:
         """Diretório `research/` dentro da sessão para saídas de deep_search."""
         return self.dir / "research"
 
-    @property
-    def transcript_path(self) -> Path:
-        """Transcript legível da sessão (o que a TUI exibe, em Markdown)."""
-        return self.dir / "transcript.md"
-
-    def append_transcript(self, text: str) -> None:
-        """Anexa um trecho ao transcript.md (append atômico por write).
-
-        Deltas de stream chegam sem quebra de linha e são concatenados;
-        eventos (tools, interrupções) incluem a própria quebra de linha.
-        """
-        with open(self.transcript_path, "a", encoding="utf-8") as f:
-            f.write(text)
-            f.flush()
-            os.fsync(f.fileno())
-
     def save_messages(self, messages: list[dict]) -> None:
         """Salva `messages[]` atomicamente (indented, UTF-8)."""
         payload = json.dumps(messages, ensure_ascii=False, indent=2)

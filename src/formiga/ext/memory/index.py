@@ -1,7 +1,7 @@
 """Índice de memória de sessão (FTS5) — Fase 8 do PRD v2.
 
-Índice SQLite+FTS5 em `~/.formiga/index.db` sobre `messages.json` e
-`transcript.md` de todas as sessões, com atualização incremental por mtime.
+Índice SQLite+FTS5 em `~/.formiga/index.db` sobre o `messages.json` de
+todas as sessões, com atualização incremental por mtime.
 
 Não depende de nada do `agent/` núcleo. O cálculo de relevância usa `bm25`
 do FTS5 quando disponível; senão, fallback `LIKE`.
@@ -138,14 +138,13 @@ class MemoryIndex:
         self._conn.commit()
 
     def index_session(self, session_dir: Path) -> None:
-        """Indexa `messages.json` e `transcript.md` de uma sessão."""
+        """Indexa `messages.json` de uma sessão."""
         if not session_dir.is_dir():
             return
         session = session_dir.name
         mtime = session_dir.stat().st_mtime
         ts = self.now_fn()
-        for fname in ("messages.json", "transcript.md"):
-            self._index_file(session, session_dir / fname, ts)
+        self._index_file(session, session_dir / "messages.json", ts)
         # Marca a sessão como indexada até este mtime.
         prev = self._meta(f"session:{session}")
         if prev is None or float(prev) < mtime:

@@ -130,13 +130,10 @@ class AgentLoop:
         # Índice do início do turno de tool ainda não confirmado pelo
         # modelo — usado para rollback se a chamada seguinte falhar.
         self._pending_len: int | None = None
-        # Bloco "## Agent" aberto no transcript (fecha antes de tools).
-        self._agent_section = False
-
         # `session_end` emitido no máximo uma vez por instância do loop.
         self._session_ended = False
 
-        # Estado do turno atual para o evento `task_end` (nudge de skills).
+        # Estado do turno atual para o evento `task_end`.
         self._task_completed_successfully = False
         self._task_successful_tools = 0
 
@@ -180,7 +177,6 @@ class AgentLoop:
         self.evicted = 0
         self.registry.current_turn = 0
         self._pending_len = None
-        self._agent_section = False
         self.secoes_extensao = {}
         self.messages = [
             {
@@ -191,7 +187,6 @@ class AgentLoop:
             }
         ]
         self.session.save_messages(self.messages)
-        self.session.append_transcript("\n## Nova sessão\n")
         self._emit("budget", self._budget_snapshot())
         return self.session
 
@@ -202,49 +197,7 @@ class AgentLoop:
         self._emit("stream", {"text": piece})
 
     def _emit(self, event: str, data: dict) -> None:
-        """Emite o evento para a TUI e espelha no transcript.md.
-
-        O transcript grava a mesma sequência que a TUI exibe (PRD §8):
-        perguntas, texto do agent, linhas de ferramenta, progresso,
-        interrupções e respostas parciais — a sessão completa fica em
-        `sessoes/<sessão>/transcript.md`.
-        """
-        if event == "stream":
-            if not self._agent_section:
-                self.session.append_transcript("\n## Agent\n")
-                self._agent_section = True
-            self.session.append_transcript(data.get("text", ""))
-            self.on_event(event, data)
-            return
-        if event == "tool_start":
-            if self._agent_section:  # fecha o bloco do agent antes da tool
-                self.session.append_transcript("\n")
-                self._agent_section = False
-            self.session.append_transcript(
-                f"\n⚙ {data.get('tool')} — {data.get('args', '')}\n"
-            )
-        elif event == "tool_end":
-            if data.get("budget_exhausted"):
-                self.session.append_transcript(
-                    f"  (⚙ {data.get('tool')} — orçamento esgotado)\n"
-                )
-            elif not data.get("ok", True):
-                seconds = data.get("seconds")
-                dur = f" ({seconds:.1f} s)" if isinstance(seconds, (int, float)) else ""
-                self.session.append_transcript(f"  ✗ erro{dur}\n")
-            else:
-                seconds = data.get("seconds")
-                if isinstance(seconds, (int, float)):
-                    self.session.append_transcript(f"  ({seconds:.1f} s)\n")
-        elif event == "tool_progress":
-            self.session.append_transcript(f"· {data.get('message', '')}\n")
-        elif event == "interrupted":
-            self.session.append_transcript("\n— interrompido pelo usuário —\n")
-        elif event == "run_final" and not data.get("streamed"):
-            if self._agent_section:
-                self.session.append_transcript("\n")
-                self._agent_section = False
-            self.session.append_transcript(f"\n## Agent\n{data.get('text', '')}\n")
+        """Emite o evento para a interface e notifica observadores."""
         if event == "tool_end":
             self.registry.observe("tool_end", data)
             if data.get("ok"):
@@ -310,8 +263,6 @@ class AgentLoop:
 
         self.messages.append({"role": "user", "content": question})
         self.session.save_messages(self.messages)
-        self._agent_section = False
-        self.session.append_transcript(f"\n## Você\n{question}\n")
         self.session.append_event("turn_started", {"turns": 0})
         self._emit("budget", self._budget_snapshot())
 
@@ -380,7 +331,6 @@ class AgentLoop:
                 self.session.append_event(
                     "llm_error", {"message": str(exc)[:400]}
                 )
-                self.session.append_transcript(f"  ✗ erro: {str(exc)[:200]}\n")
                 raise
             if self._cancel.is_set():
                 # Cancelamento pedido durante a chamada: resposta descartada.

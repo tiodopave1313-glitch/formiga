@@ -26,11 +26,9 @@ formiga agent --print \
 Verificar:
 
 - [ ] A resposta final cita o backend do arquivo e fundamentos da busca.
-- [ ] A sessão existe em `sessoes/<timestamp>/` com `messages.json`,
-      `events.jsonl` e `transcript.md` (turnos, `tool_call` com `ok`,
-      durações; o transcript contém toda a conversa em Markdown).
-- [ ] Nenhuma credencial aparece em `messages.json`, `events.jsonl`,
-      `transcript.md` ou stdout.
+- [ ] A sessão existe em `sessoes/<timestamp>/` com `messages.json` e
+      `events.jsonl` (turnos, `tool_call` com `ok`, durações).
+- [ ] Nenhuma credencial aparece em `messages.json`, `events.jsonl` ou stdout.
 - [ ] Nenhuma sequência de escape ANSI no stdout (rode com `NO_COLOR=1`
       e confira a saída limpa).
 
@@ -59,10 +57,10 @@ Na CLI interativa, verificar (nesta ordem):
       `· planejado · buscas · síntese`.
 - [ ] A linha de orçamento reflete o loop real: `turnos n/24 · llm n/120 ·`
       `ctx Xk/Yk · ext N ferramentas` aparece entre turnos.
-- [ ] `Ctrl+C` **durante a resposta** interrompe só o turno atual (parcial salva,
-      `— interrompido pelo usuário —` no transcript, volta ao prompt).
+- [ ] `Ctrl+C` **durante a resposta** interrompe só o turno atual (parcial salva
+      em `messages.json`, aviso na tela, volta ao prompt).
 - [ ] `Ctrl+C` **no prompt** sai do programa limpo.
-- [ ] `Ctrl+D` (EOF) no prompt sai apontando o `transcript.md`.
+- [ ] `Ctrl+D` (EOF) no prompt sai apontando o diretório da sessão.
 - [ ] Com `NO_COLOR=1 formiga agent …`, tudo permanece legível.
 - [ ] `/help` lista comandos e skills; o relatório do `deep_search` fica em
       `sessoes/<timestamp>/`.
@@ -225,7 +223,7 @@ Verificar:
 - [ ] `formiga memory save` grava o fato em `~/.formiga/memory/MEMORY.md`.
 - [ ] `formiga memory show` exibe perfil e memória curada.
 - [ ] O modelo usa `recall` para achar fatos de sessão antiga.
-- [ ] `USER.md` aparece como seção no prompt (ver `transcript.md`).
+- [ ] `USER.md` aparece como seção no prompt (ver `events.jsonl`).
 - [ ] Nenhuma credencial aparece em `MEMORY.md`.
 
 ## 10. Skills declarativas
@@ -272,7 +270,6 @@ Verificar:
 - [ ] `/skills reject <id>` descarta a proposta.
 - [ ] Skill em `.formiga/skills/` de projeto fora da allowlist não carrega
       (aviso em `/skills`).
-- [ ] Após tarefa bem-sucedida com ferramentas, o nudge sugere `skill_manage`.
 
 ## Aceite (marcar ao terminar)
 
@@ -290,7 +287,6 @@ Verificar:
 - [ ] Skills: `skills list` e `/skills` listam; `/nome` expande; `skill_manage`
       só grava após `/skills approve`; projeto sem trust não carrega skill.
 - [ ] `--print` e `--local` rodam sem gateway.
-- [ ] Nenhuma credencial em `messages.json`, `events.jsonl`, `transcript.md`
-      nem stdout.
+- [ ] Nenhuma credencial em `messages.json`, `events.jsonl` nem stdout.
 
 Esse teste demonstra integração, **não comprova qualidade factual**.

@@ -155,8 +155,8 @@ formiga memory pending
 formiga memory save
 ```
 
-- **Recall**: `recall(query, limit?)` encontra trechos de `messages.json` e
-  `transcript.md` de sessões antigas (índice incremental por mtime, FTS5).
+- **Recall**: `recall(query, limit?)` encontra trechos do `messages.json` de
+  sessões antigas (índice incremental por mtime, FTS5).
 - **Nudge**: ao fim da sessão (e a cada 10 turnos), o harness sugere salvar
   o que aprendeu; a gravação só ocorre pelo comando humano `/memory save`
   (o modelo nunca grava sozinho — staging em `pending.json`).
@@ -198,9 +198,7 @@ expansão do conteúdo para a próxima mensagem (registrada no evento
 `skill_expanded`). O modelo também pode propor novas skills com
 `skill_manage(action="write")`: a proposta fica em
 `~/.formiga/skills/pending.json` e **nada é gravado** até um humano aprovar com
-`/skills approve <id>` (ou descartar com `/skills reject <id>`). Depois de uma
-tarefa bem-sucedida com ferramentas, o harness sugere persistir o procedimento
-(nudge), mas nunca grava sozinho.
+`/skills approve <id>` (ou descartar com `/skills reject <id>`).
 
 ## Opções de `research`
 
@@ -539,7 +537,7 @@ formiga/
 │       ├── factory.py     # build_agent: discovery → registry → loop
 │       ├── profiles.py    # perfis de modelo (gemma4-e2b, gemma4-e4b, nemotron-3.5-bolt-e4b)
 │       ├── guardrails.py  # AgentBudget, ToolBudgets, AntiLoop
-│       ├── session.py     # sessão em disco (messages, events, transcript)
+│       ├── session.py     # sessão em disco (messages.json, events.jsonl)
 │       ├── ui.py          # cores, limpeza de tela e painel da CLI
 │       ├── extensions/    # engine de extensões (registro, hooks, eventos)
 │       │   ├── api.py     # ExtensionAPI (register_tool, on, ui.notify)

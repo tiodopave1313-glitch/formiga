@@ -98,7 +98,6 @@ def estado_sessao(registry: ExtensionRegistry, session: Session) -> dict:
     return {
         "session": getattr(session, "session_id", ""),
         "session_dir": str(getattr(session, "dir", "")),
-        "transcript": str(getattr(session, "transcript_path", "")),
         "tools": [reg.tool.name for reg in registry.registrations.values()],
         "extensions": [
             {
@@ -150,9 +149,6 @@ def linhas_painel(estado: dict) -> list[str]:
         f"{pintar('formiga agent', 'cyan', negrito=True)}"
         f" · sessão: {estado.get('session_dir', '')}"
     ]
-    transcript = estado.get("transcript")
-    if transcript:
-        linhas.append(pintar(f"transcript: {transcript}", dim=True))
     linhas.append("")
 
     _secao(linhas, "ferramentas", list(estado.get("tools") or []), "cyan")
