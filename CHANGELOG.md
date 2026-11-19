@@ -42,6 +42,11 @@ e este projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
   `memory,skills`, vars de orçamento do agent, cron e memória).
 - `docs/smoke_agent.md`: removidos `formiga agent --profile` e
   `formiga memory ...` (não existem); smoke alinhado ao `gemma4:e4b`.
+- Nova subseção "Busca: SearXNG e motores" no README: requisição
+  `GET /search?format=json` sem categoria (só `general`), motores medidos na
+  instância local de referência (`brave`, `google cse`, `duckduckgo` ativos;
+  `google` suspenso pelo SearXNG; `bing` desabilitado) e como verificá-los
+  em `/config?format=json`.
 
 ### Correções — backend llama.cpp
 

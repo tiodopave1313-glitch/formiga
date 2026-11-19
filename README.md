@@ -501,6 +501,40 @@ Instale o modelo escolhido no backend correspondente (`ollama pull gemma4:e4b`
 para o default) e configure uma instância SearXNG própria com o formato JSON
 habilitado (`search.formats: [html, json]`).
 
+### Busca: SearXNG e motores
+
+O Formiga **não integra APIs de busca diretamente**: ele consulta uma
+instância SearXNG própria (`[search] searxng_url` / `FORMIGA_SEARXNG_URL`,
+default `http://localhost:8080`) com o formato JSON habilitado
+(`search.formats: [html, json]` no `settings.yml` da SearXNG).
+
+A requisição é `GET /search?q=<consulta>&format=json` — **sem parâmetro de
+categoria**, portanto a SearXNG responde com os motores da categoria
+`general`. Os snippets servem apenas para **selecionar páginas**; nunca
+viram evidência final (as citações saem dos textos baixados em `pages/`).
+As consultas enviadas ficam registradas em `events.jsonl`.
+
+**Motores da instância local de referência** (medido em 2026-11-19 com
+SearXNG `2026.11.14`; liste a qualquer momento com
+`curl 'http://localhost:8080/config?format=json'`):
+
+| Motor (categoria `general`) | Estado |
+|---|---|
+| `brave` | ativo — respondeu em todas as consultas de teste |
+| `google cse` | ativo — Custom Search Engine configurado na instância |
+| `duckduckgo` | ativo |
+| `google` | habilitado, mas **suspenso** pelo SearXNG (`Suspended: access denied`) — volta sozinho após o cooldown |
+| `bing` | **desabilitado** no `settings.yml` |
+| `currency`, `dictzone`, `lingva`, `mymemory translated` | habilitados em `general` (moeda/tradução); respondem a consultas do tipo |
+
+A mesma instância carrega ~250 motores em outras categorias (`news`,
+`science`, `images`, `videos`, `it`, `social media`...), mas o Formiga **não**
+consulta essas categorias — hoje apenas `general`.
+
+Para trocar os motores, edite o `settings.yml` da SearXNG (habilitar e
+desabilitar por motor) e/ou configure seu próprio Google CSE. O Formiga não
+guarda nenhuma chave de busca: tudo passa pela instância (ver "Privacidade").
+
 ## Apêndice: backends e geração
 
 ### Backends de modelo

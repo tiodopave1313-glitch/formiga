@@ -38,6 +38,9 @@ max_retries = 2
 # fallback_after_failures = 1
 
 [search]
+# Instância SearXNG própria com JSON habilitado (search.formats: [html, json]).
+# A consulta vai sem categoria → motores "general" da instância; ver README,
+# seção "Busca: SearXNG e motores" para os motores ativos de referência.
 searxng_url = "http://localhost:8080"
 
 [budget]

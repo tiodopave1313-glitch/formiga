@@ -10,7 +10,9 @@ para confirmar o comportamento com um modelo pequeno de verdade.
 - Uma das duas: chave do NIM em `NVIDIA_API_KEY` **ou** Ollama/llama-server local
   com um modelo da família-alvo (default: Gemma 4 E4B — `ollama pull gemma4:e4b`;
   alternativas: `gemma4:e2b`, `nemotron-3.5-bolt`).
-- SearXNG local para `web_search`/`deep_search` (ex.: `http://localhost:8080`).
+- SearXNG local para `web_search`/`deep_search` (ex.: `http://localhost:8080`),
+  com JSON habilitado — motores ativos em `general`: ver README, seção
+  "Busca: SearXNG e motores".
 - Terminal com pelo menos 80×24 (funciona menor, mas este é o alvo).
 
 ## 1. Headless (`--print`) fim a fim — backend remoto (NIM)
