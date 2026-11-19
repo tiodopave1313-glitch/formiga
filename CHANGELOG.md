@@ -44,9 +44,10 @@ e este projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
   `formiga memory ...` (não existem); smoke alinhado ao `gemma4:e4b`.
 - Nova subseção "Busca: SearXNG e motores" no README: requisição
   `GET /search?format=json` sem categoria (só `general`), motores medidos na
-  instância local de referência (`brave`, `google cse`, `duckduckgo` ativos;
-  `google` suspenso pelo SearXNG; `bing` desabilitado) e como verificá-los
-  em `/config?format=json`.
+  instância local de referência (`google cse` respondente estável; `brave` e
+  `duckduckgo` com suspensão temporária por rate-limit/CAPTCHA; `google` e
+  `bing` desabilitados no `settings.yml`) e como verificá-los em
+  `/config?format=json`.
 
 ### Correções — backend llama.cpp
 

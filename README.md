@@ -514,18 +514,23 @@ categoria**, portanto a SearXNG responde com os motores da categoria
 viram evidência final (as citações saem dos textos baixados em `pages/`).
 As consultas enviadas ficam registradas em `events.jsonl`.
 
-**Motores da instância local de referência** (medido em 2026-11-19 com
-SearXNG `2026.11.14`; liste a qualquer momento com
+**Motores da instância local de referência** (estado e medição de
+2026-11-19 com SearXNG `2026.11.14`; liste a qualquer momento com
 `curl 'http://localhost:8080/config?format=json'`):
 
-| Motor (categoria `general`) | Estado |
-|---|---|
-| `brave` | ativo — respondeu em todas as consultas de teste |
-| `google cse` | ativo — Custom Search Engine configurado na instância |
-| `duckduckgo` | ativo |
-| `google` | habilitado, mas **suspenso** pelo SearXNG (`Suspended: access denied`) — volta sozinho após o cooldown |
-| `bing` | **desabilitado** no `settings.yml` |
-| `currency`, `dictzone`, `lingva`, `mymemory translated` | habilitados em `general` (moeda/tradução); respondem a consultas do tipo |
+| Motor (categoria `general`) | Estado | Observação |
+|---|---|---|
+| `google cse` | habilitado | **respondente estável** — Custom Search Engine configurado na instância |
+| `brave` | habilitado | responde bem, mas o SearXNG o **suspende temporariamente** após rate-limit (`Suspended: too many requests`) e volta após o cooldown |
+| `duckduckgo` | habilitado | idem: pode devolver `CAPTCHA` e ficar suspenso temporariamente |
+| `google` | **desabilitado** no `settings.yml` (não resolvia: `access denied`) | — |
+| `bing` | **desabilitado** no `settings.yml` | — |
+| `currency`, `dictzone`, `lingva`, `mymemory translated` | habilitados em `general` (moeda/tradução); respondem a consultas do tipo | — |
+
+Como as suspensões do SearXNG são temporárias (cooldown automático), a
+composição que **responde em cada consulta varia** — na medição de 19/11 o
+`google cse` foi o único estável. Se quiser mais redundância, reabilite
+`bing` ou `google` no `settings.yml`.
 
 A mesma instância carrega ~250 motores em outras categorias (`news`,
 `science`, `images`, `videos`, `it`, `social media`...), mas o Formiga **não**
